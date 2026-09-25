@@ -1,0 +1,39 @@
+<svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="goldGradient" x1="10" y1="10" x2="90" y2="90" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#F59E0B"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+  </defs>
+  <!-- دائرة الخلفية التدرجية اللوجستية -->
+  <circle cx="50" cy="50" r="46" fill="url(#goldGradient)" />
+  
+  <!-- خطوط الحركة والسرعة اللوجستية -->
+  <path d="M18 42H28" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M12 50H26" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M16 58H28" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>
+  
+  <!-- هيكل الشاحنة الثقيلة الحديث -->
+  <!-- كابينة الشاحنة -->
+  <path d="M58 35H69C71.5 35 73.5 37 74.2 39.4L78.5 53H58V35Z" fill="#0F172A"/>
+  <path d="M60 38H68C69.2 38 70.2 39 70.5 40.2L73 48H60V38Z" fill="#38BDF8"/>
+  
+  <!-- صندوق الحمولة الرئيسي -->
+  <rect x="30" y="32" width="26" height="27" rx="3" fill="#0F172A"/>
+  <path d="M36 32V59" stroke="#1E293B" stroke-width="1.5"/>
+  <path d="M43 32V59" stroke="#1E293B" stroke-width="1.5"/>
+  <path d="M50 32V59" stroke="#1E293B" stroke-width="1.5"/>
+  
+  <!-- قاعدة الشاحنة والمصد -->
+  <rect x="26" y="58" width="54" height="5" rx="2" fill="#0F172A"/>
+  
+  <!-- عجلات الشاحنة الثقيلة -->
+  <circle cx="68" cy="65" r="7" fill="#0F172A"/>
+  <circle cx="68" cy="65" r="3.5" fill="#FFFFFF"/>
+  
+  <circle cx="48" cy="65" r="7" fill="#0F172A"/>
+  <circle cx="48" cy="65" r="3.5" fill="#FFFFFF"/>
+  
+  <circle cx="35" cy="65" r="7" fill="#0F172A"/>
+  <circle cx="35" cy="65" r="3.5" fill="#FFFFFF"/>
+</svg>
