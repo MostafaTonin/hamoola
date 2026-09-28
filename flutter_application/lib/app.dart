@@ -4,7 +4,7 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
 /// Root Application Widget for Hamoola
-class HamulaApp extends StatelessWidget {
+///class HamulaApp extends StatelessWidget {
   const HamulaApp({super.key});
 
   @override
