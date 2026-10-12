@@ -1,0 +1,1216 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>أسئلة الاجتماع التقني — الدفعة الأولى</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <style>
+    /* ─────────────────────────────────────────────────
+       Design Tokens
+    ───────────────────────────────────────────────── */
+    :root {
+      --bg:          #0f1117;
+      --surface:     #181c27;
+      --surface-2:   #1e2333;
+      --border:      #2a2f42;
+      --border-focus:#4a6fa5;
+      --accent:      #4a6fa5;
+      --accent-soft: rgba(74, 111, 165, 0.12);
+      --accent-glow: rgba(74, 111, 165, 0.25);
+      --text-1:      #e8eaf2;
+      --text-2:      #8b91a8;
+      --text-3:      #555d78;
+      --success:     #3a7d5e;
+      --radius-sm:   8px;
+      --radius-md:   14px;
+      --radius-lg:   20px;
+      --shadow:      0 4px 32px rgba(0,0,0,0.35);
+      --transition:  200ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ─────────────────────────────────────────────────
+       Reset & Base
+    ───────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: 'IBM Plex Sans Arabic', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text-1);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 80px;
+      line-height: 1.7;
+      direction: rtl;
+    }
+
+    /* ─────────────────────────────────────────────────
+       Page Header
+    ───────────────────────────────────────────────── */
+    .page-header {
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 40px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 28px;
+    }
+
+    .page-header .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid var(--accent-glow);
+      border-radius: 100px;
+      padding: 4px 12px;
+      margin-bottom: 16px;
+    }
+
+    .page-header h1 {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text-1);
+      margin-bottom: 8px;
+      line-height: 1.3;
+    }
+
+    .page-header p {
+      font-size: 14px;
+      color: var(--text-2);
+      max-width: 560px;
+    }
+
+    /* ─────────────────────────────────────────────────
+       Progress Bar
+    ───────────────────────────────────────────────── */
+    .progress-wrapper {
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 28px;
+    }
+
+    .progress-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .progress-label {
+      font-size: 13px;
+      color: var(--text-2);
+      font-weight: 500;
+    }
+
+    .progress-count {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: var(--surface-2);
+      border-radius: 100px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 100px;
+      transition: width 400ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ─────────────────────────────────────────────────
+       Question Card
+    ───────────────────────────────────────────────── */
+    .card-container {
+      width: 100%;
+      max-width: 760px;
+      position: relative;
+    }
+
+    .question-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 40px 44px;
+      box-shadow: var(--shadow);
+      display: none;
+      animation: fadeIn 240ms ease forwards;
+    }
+
+    .question-card.active { display: block; }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0);    }
+    }
+
+    /* Card top row */
+    .card-top {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 28px;
+    }
+
+    .q-number {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      border: 1.5px solid var(--accent-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .q-id {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-3);
+      letter-spacing: 0.06em;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 9px;
+    }
+
+    .q-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-2);
+      margin-right: auto;
+    }
+
+    /* Question text */
+    .q-text {
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-1);
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+
+    /* Divider */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin-bottom: 24px;
+    }
+
+    /* Options */
+    .options-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 14px;
+    }
+
+    .options-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .option-item label {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 14px 18px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid var(--border);
+      background: var(--surface-2);
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition);
+    }
+
+    .option-item label:hover {
+      border-color: var(--border-focus);
+      background: var(--accent-soft);
+    }
+
+    .option-item input[type="radio"] { display: none; }
+
+    .option-item input[type="radio"]:checked + label {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .option-item input[type="radio"]:checked + label .radio-dot {
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .option-item input[type="radio"]:checked + label .radio-dot::after {
+      opacity: 1;
+    }
+
+    .radio-dot {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid var(--text-3);
+      flex-shrink: 0;
+      margin-top: 2px;
+      position: relative;
+      transition: border-color var(--transition), background var(--transition);
+    }
+
+    .radio-dot::after {
+      content: '';
+      position: absolute;
+      inset: 3px;
+      border-radius: 50%;
+      background: var(--bg);
+      opacity: 0;
+      transition: opacity var(--transition);
+    }
+
+    .option-text {
+      font-size: 15px;
+      color: var(--text-1);
+      line-height: 1.5;
+    }
+
+    .option-text .en {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent);
+      direction: ltr;
+      unicode-bidi: embed;
+    }
+
+    /* Other option */
+    .other-option {
+      margin-bottom: 28px;
+    }
+
+    .other-option label {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      padding: 14px 18px;
+      border-radius: var(--radius-md);
+      border: 1.5px solid var(--border);
+      background: var(--surface-2);
+      cursor: pointer;
+      transition: border-color var(--transition), background var(--transition);
+      margin-bottom: 10px;
+    }
+
+    .other-option label:hover {
+      border-color: var(--border-focus);
+      background: var(--accent-soft);
+    }
+
+    .other-option input[type="radio"] { display: none; }
+
+    .other-option input[type="radio"]:checked + label {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+
+    .other-option input[type="radio"]:checked + label .radio-dot {
+      border-color: var(--accent);
+      background: var(--accent);
+    }
+
+    .other-option input[type="radio"]:checked + label .radio-dot::after {
+      opacity: 1;
+    }
+
+    .other-input {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-1);
+      font-family: 'IBM Plex Sans Arabic', sans-serif;
+      font-size: 14px;
+      padding: 12px 16px;
+      outline: none;
+      resize: vertical;
+      min-height: 70px;
+      transition: border-color var(--transition);
+      direction: rtl;
+      display: none;
+    }
+
+    .other-input:focus { border-color: var(--border-focus); }
+    .other-input.visible { display: block; }
+
+    /* Notes */
+    .notes-section {
+      margin-bottom: 36px;
+    }
+
+    .notes-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 10px;
+    }
+
+    .notes-textarea {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-1);
+      font-family: 'IBM Plex Sans Arabic', sans-serif;
+      font-size: 14px;
+      line-height: 1.7;
+      padding: 16px 18px;
+      outline: none;
+      resize: vertical;
+      min-height: 100px;
+      transition: border-color var(--transition);
+      direction: rtl;
+    }
+
+    .notes-textarea::placeholder { color: var(--text-3); }
+    .notes-textarea:focus { border-color: var(--border-focus); }
+
+    /* Navigation */
+    .card-nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: var(--radius-sm);
+      font-family: 'IBM Plex Sans Arabic', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: all var(--transition);
+    }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1.5px solid var(--border);
+      color: var(--text-2);
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      border-color: var(--border-focus);
+      color: var(--text-1);
+      background: var(--surface-2);
+    }
+
+    .btn-ghost:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: 1.5px solid transparent;
+    }
+
+    .btn-primary:hover {
+      background: #5980b8;
+      box-shadow: 0 0 16px var(--accent-glow);
+    }
+
+    .btn-success {
+      background: var(--success);
+      color: #fff;
+      border: 1.5px solid transparent;
+    }
+
+    .btn-success:hover {
+      filter: brightness(1.1);
+      box-shadow: 0 0 16px rgba(58, 125, 94, 0.3);
+    }
+
+    /* Arrow icons */
+    .arrow { font-size: 16px; }
+
+    /* ─────────────────────────────────────────────────
+       Summary Screen
+    ───────────────────────────────────────────────── */
+    .summary-screen {
+      display: none;
+      width: 100%;
+      max-width: 760px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 48px 44px;
+      box-shadow: var(--shadow);
+      text-align: center;
+      animation: fadeIn 300ms ease forwards;
+    }
+
+    .summary-screen.active { display: block; }
+
+    .summary-icon {
+      width: 64px;
+      height: 64px;
+      background: rgba(58, 125, 94, 0.15);
+      border: 1.5px solid rgba(58, 125, 94, 0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      margin: 0 auto 24px;
+    }
+
+    .summary-screen h2 {
+      font-size: 22px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .summary-screen p {
+      color: var(--text-2);
+      font-size: 15px;
+      margin-bottom: 36px;
+      max-width: 420px;
+      margin-inline: auto;
+    }
+
+    .summary-list {
+      list-style: none;
+      text-align: right;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      margin-bottom: 32px;
+    }
+
+    .summary-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      transition: background var(--transition);
+    }
+
+    .summary-row:last-child { border-bottom: none; }
+
+    .summary-row:hover { background: var(--surface-2); }
+
+    .summary-row-id {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border-radius: 4px;
+      padding: 2px 7px;
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    .summary-row-content { flex: 1; }
+
+    .summary-row-q {
+      font-size: 13px;
+      color: var(--text-2);
+      margin-bottom: 4px;
+    }
+
+    .summary-row-answer {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+
+    .summary-row-answer.unanswered {
+      color: var(--text-3);
+      font-weight: 400;
+      font-style: italic;
+    }
+
+    .summary-actions {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    /* ─────────────────────────────────────────────────
+       Responsive
+    ───────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      .question-card,
+      .summary-screen { padding: 28px 22px; }
+      .q-text { font-size: 16px; }
+      .card-top { flex-wrap: wrap; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ─── Page Header ─── -->
+  <header class="page-header">
+    <div class="badge">📋 الدفعة الأولى · Batch 01</div>
+    <h1>أسئلة الاجتماع التقني</h1>
+    <p>
+      أسئلة موجهة للمشرف الرئيسي على المشروع لحسم استراتيجية تطوير الـ&nbsp;Feature
+      داخل الـ&nbsp;Sprint.
+    </p>
+  </header>
+
+  <!-- ─── Progress ─── -->
+  <div class="progress-wrapper" id="progressWrapper">
+    <div class="progress-meta">
+      <span class="progress-label" id="progressLabel">السؤال 1 من 5</span>
+      <span class="progress-count" id="progressCount">Question 1 of 5</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="progressFill" style="width: 20%;"></div>
+    </div>
+  </div>
+
+  <!-- ─── Cards Container ─── -->
+  <div class="card-container">
+
+    <!-- ══════════════════════════════════════════
+         Question 1 — DEV-001
+    ══════════════════════════════════════════ -->
+    <article class="question-card active" id="q1">
+      <div class="card-top">
+        <div class="q-number">01</div>
+        <span class="q-id">DEV-001</span>
+        <span class="q-title">استراتيجية تطوير الـ Feature</span>
+      </div>
+
+      <p class="q-text">
+        ما الاستراتيجية التي تنصحنا باتباعها عند تطوير الـ&nbsp;Feature داخل الـ&nbsp;Sprint؟
+      </p>
+
+      <div class="divider"></div>
+
+      <p class="options-label">اختر الإجابة الأنسب</p>
+
+      <ul class="options-list" role="radiogroup" aria-label="خيارات السؤال الأول">
+        <li class="option-item">
+          <input type="radio" name="q1" id="q1-a" value="frontend-first" />
+          <label for="q1-a">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              <span class="en">Frontend First</span> — بناء الواجهة أولًا ثم
+              <span class="en">Backend</span> وقاعدة البيانات.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q1" id="q1-b" value="backend-first" />
+          <label for="q1-b">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              <span class="en">Backend First</span> — بناء الـ&nbsp;<span class="en">Backend</span>
+              وقاعدة البيانات أولًا ثم الواجهة.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q1" id="q1-c" value="vertical-slice" />
+          <label for="q1-c">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              <span class="en">Vertical Slice</span> — تطوير الـ&nbsp;<span class="en">Feature</span>
+              بشكل متكامل من <span class="en">Frontend</span> إلى
+              <span class="en">Backend</span> إلى قاعدة البيانات ثم الاختبار.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q1" id="q1-d" value="hybrid" />
+          <label for="q1-d">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              <span class="en">Hybrid</span> — الجمع بين أكثر من أسلوب حسب طبيعة الـ&nbsp;<span class="en">Feature</span>.
+            </span>
+          </label>
+        </li>
+      </ul>
+
+      <!-- Other -->
+      <div class="other-option">
+        <input type="radio" name="q1" id="q1-other" value="other" />
+        <label for="q1-other">
+          <span class="radio-dot"></span>
+          <span class="option-text">Other — غير ذلك</span>
+        </label>
+        <textarea
+          class="other-input"
+          id="q1-other-text"
+          placeholder="اكتب إجابتك هنا…"
+          aria-label="إجابة أخرى للسؤال الأول"
+        ></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div class="notes-section">
+        <p class="notes-label">ملاحظات المشرف</p>
+        <textarea
+          class="notes-textarea"
+          id="q1-notes"
+          placeholder="أضف أي تعليق أو توضيح تراه مناسبًا…"
+          aria-label="ملاحظات المشرف على السؤال الأول"
+        ></textarea>
+      </div>
+
+      <nav class="card-nav" aria-label="تنقل بين الأسئلة">
+        <button class="btn btn-ghost" disabled id="q1-prev" aria-label="السؤال السابق">
+          <span class="arrow">→</span> السابق
+        </button>
+        <button class="btn btn-primary" onclick="goTo(2)" id="q1-next" aria-label="السؤال التالي">
+          التالي <span class="arrow">←</span>
+        </button>
+      </nav>
+    </article>
+
+    <!-- ══════════════════════════════════════════
+         Question 2 — DEV-002
+    ══════════════════════════════════════════ -->
+    <article class="question-card" id="q2">
+      <div class="card-top">
+        <div class="q-number">02</div>
+        <span class="q-id">DEV-002</span>
+        <span class="q-title">نطاق الـ Sprint</span>
+      </div>
+
+      <p class="q-text">
+        هل تنصح بأن يكون هدف الـ&nbsp;Sprint هو إكمال مجموعة من الـ&nbsp;Features
+        بشكل متكامل وقابل للاختبار، بدلًا من تخصيص الـ&nbsp;Sprint لطبقة تقنية واحدة؟
+      </p>
+
+      <div class="divider"></div>
+
+      <p class="options-label">اختر الإجابة الأنسب</p>
+
+      <ul class="options-list" role="radiogroup" aria-label="خيارات السؤال الثاني">
+        <li class="option-item">
+          <input type="radio" name="q2" id="q2-a" value="yes-complete" />
+          <label for="q2-a">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              نعم، كل <span class="en">Sprint</span> يجب أن ينتج
+              <span class="en">Features</span> متكاملة وقابلة للاختبار.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q2" id="q2-b" value="no-layer" />
+          <label for="q2-b">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              لا، يمكن تخصيص <span class="en">Sprint</span> لطبقة تقنية محددة.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q2" id="q2-c" value="depends" />
+          <label for="q2-c">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              يعتمد على طبيعة المشروع وطبيعة الـ&nbsp;<span class="en">Sprint</span>.
+            </span>
+          </label>
+        </li>
+      </ul>
+
+      <!-- Other -->
+      <div class="other-option">
+        <input type="radio" name="q2" id="q2-other" value="other" />
+        <label for="q2-other">
+          <span class="radio-dot"></span>
+          <span class="option-text">Other — غير ذلك</span>
+        </label>
+        <textarea
+          class="other-input"
+          id="q2-other-text"
+          placeholder="اكتب إجابتك هنا…"
+          aria-label="إجابة أخرى للسؤال الثاني"
+        ></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div class="notes-section">
+        <p class="notes-label">ملاحظات المشرف</p>
+        <textarea
+          class="notes-textarea"
+          id="q2-notes"
+          placeholder="أضف أي تعليق أو توضيح تراه مناسبًا…"
+          aria-label="ملاحظات المشرف على السؤال الثاني"
+        ></textarea>
+      </div>
+
+      <nav class="card-nav" aria-label="تنقل بين الأسئلة">
+        <button class="btn btn-ghost" onclick="goTo(1)" id="q2-prev" aria-label="السؤال السابق">
+          <span class="arrow">→</span> السابق
+        </button>
+        <button class="btn btn-primary" onclick="goTo(3)" id="q2-next" aria-label="السؤال التالي">
+          التالي <span class="arrow">←</span>
+        </button>
+      </nav>
+    </article>
+
+    <!-- ══════════════════════════════════════════
+         Question 3 — DEV-003
+    ══════════════════════════════════════════ -->
+    <article class="question-card" id="q3">
+      <div class="card-top">
+        <div class="q-number">03</div>
+        <span class="q-id">DEV-003</span>
+        <span class="q-title">ترتيب مكونات الـ Feature</span>
+      </div>
+
+      <p class="q-text">
+        عند البدء بتنفيذ <span class="en">Feature</span> جديدة، ما الترتيب الذي
+        تنصح الفريق باتباعه بين مكونات الـ&nbsp;<span class="en">Feature</span>؟
+      </p>
+
+      <div class="divider"></div>
+
+      <p class="options-label">اختر الإجابة الأنسب</p>
+
+      <ul class="options-list" role="radiogroup" aria-label="خيارات السؤال الثالث">
+        <li class="option-item">
+          <input type="radio" name="q3" id="q3-a" value="ui-backend-db" />
+          <label for="q3-a">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              <span class="en">UI → Backend → Database</span>
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q3" id="q3-b" value="db-backend-ui" />
+          <label for="q3-b">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              <span class="en">Database → Backend → UI</span>
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q3" id="q3-c" value="backend-db-ui" />
+          <label for="q3-c">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              <span class="en">Backend → Database → UI</span>
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q3" id="q3-d" value="flexible" />
+          <label for="q3-d">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              يمكن البدء من أي طبقة حسب طبيعة الـ&nbsp;<span class="en">Feature</span>.
+            </span>
+          </label>
+        </li>
+      </ul>
+
+      <!-- Other -->
+      <div class="other-option">
+        <input type="radio" name="q3" id="q3-other" value="other" />
+        <label for="q3-other">
+          <span class="radio-dot"></span>
+          <span class="option-text">Other — غير ذلك</span>
+        </label>
+        <textarea
+          class="other-input"
+          id="q3-other-text"
+          placeholder="اكتب إجابتك هنا…"
+          aria-label="إجابة أخرى للسؤال الثالث"
+        ></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div class="notes-section">
+        <p class="notes-label">ملاحظات المشرف</p>
+        <textarea
+          class="notes-textarea"
+          id="q3-notes"
+          placeholder="أضف أي تعليق أو توضيح تراه مناسبًا…"
+          aria-label="ملاحظات المشرف على السؤال الثالث"
+        ></textarea>
+      </div>
+
+      <nav class="card-nav" aria-label="تنقل بين الأسئلة">
+        <button class="btn btn-ghost" onclick="goTo(2)" id="q3-prev" aria-label="السؤال السابق">
+          <span class="arrow">→</span> السابق
+        </button>
+        <button class="btn btn-primary" onclick="goTo(4)" id="q3-next" aria-label="السؤال التالي">
+          التالي <span class="arrow">←</span>
+        </button>
+      </nav>
+    </article>
+
+    <!-- ══════════════════════════════════════════
+         Question 4 — DEV-004
+    ══════════════════════════════════════════ -->
+    <article class="question-card" id="q4">
+      <div class="card-top">
+        <div class="q-number">04</div>
+        <span class="q-id">DEV-004</span>
+        <span class="q-title">اكتمال الـ Feature</span>
+      </div>
+
+      <p class="q-text">
+        متى نعتبر الـ&nbsp;<span class="en">Feature</span> مكتملة وجاهزة للانتقال
+        من مرحلة التطوير إلى مرحلة الاختبار؟
+      </p>
+
+      <div class="divider"></div>
+
+      <p class="options-label">اختر الإجابة الأنسب</p>
+
+      <ul class="options-list" role="radiogroup" aria-label="خيارات السؤال الرابع">
+        <li class="option-item">
+          <input type="radio" name="q4" id="q4-a" value="frontend-done" />
+          <label for="q4-a">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              عند اكتمال الـ&nbsp;<span class="en">Frontend</span>.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q4" id="q4-b" value="backend-api-done" />
+          <label for="q4-b">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              عند اكتمال الـ&nbsp;<span class="en">Backend</span> والـ&nbsp;<span class="en">API</span>.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q4" id="q4-c" value="all-connected" />
+          <label for="q4-c">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              عند اكتمال جميع مكونات الـ&nbsp;<span class="en">Feature</span>
+              وربطها معًا.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q4" id="q4-d" value="acceptance-criteria" />
+          <label for="q4-d">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              عند اجتياز <span class="en">Acceptance Criteria</span>
+              والاختبارات المطلوبة.
+            </span>
+          </label>
+        </li>
+      </ul>
+
+      <!-- Other -->
+      <div class="other-option">
+        <input type="radio" name="q4" id="q4-other" value="other" />
+        <label for="q4-other">
+          <span class="radio-dot"></span>
+          <span class="option-text">Other — غير ذلك</span>
+        </label>
+        <textarea
+          class="other-input"
+          id="q4-other-text"
+          placeholder="اكتب إجابتك هنا…"
+          aria-label="إجابة أخرى للسؤال الرابع"
+        ></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div class="notes-section">
+        <p class="notes-label">ملاحظات المشرف</p>
+        <textarea
+          class="notes-textarea"
+          id="q4-notes"
+          placeholder="أضف أي تعليق أو توضيح تراه مناسبًا…"
+          aria-label="ملاحظات المشرف على السؤال الرابع"
+        ></textarea>
+      </div>
+
+      <nav class="card-nav" aria-label="تنقل بين الأسئلة">
+        <button class="btn btn-ghost" onclick="goTo(3)" id="q4-prev" aria-label="السؤال السابق">
+          <span class="arrow">→</span> السابق
+        </button>
+        <button class="btn btn-primary" onclick="goTo(5)" id="q4-next" aria-label="السؤال التالي">
+          التالي <span class="arrow">←</span>
+        </button>
+      </nav>
+    </article>
+
+    <!-- ══════════════════════════════════════════
+         Question 5 — TEST-001
+    ══════════════════════════════════════════ -->
+    <article class="question-card" id="q5">
+      <div class="card-top">
+        <div class="q-number">05</div>
+        <span class="q-id">TEST-001</span>
+        <span class="q-title">الاختبار أثناء التطوير</span>
+      </div>
+
+      <p class="q-text">
+        متى تنصح بإجراء اختبار الـ&nbsp;<span class="en">Feature</span>؟
+      </p>
+
+      <div class="divider"></div>
+
+      <p class="options-label">اختر الإجابة الأنسب</p>
+
+      <ul class="options-list" role="radiogroup" aria-label="خيارات السؤال الخامس">
+        <li class="option-item">
+          <input type="radio" name="q5" id="q5-a" value="after-all" />
+          <label for="q5-a">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              بعد انتهاء جميع مراحل تطوير المشروع.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q5" id="q5-b" value="after-feature" />
+          <label for="q5-b">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              بعد اكتمال كل <span class="en">Feature</span>.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q5" id="q5-c" value="continuous" />
+          <label for="q5-c">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              بشكل مستمر أثناء تطوير الـ&nbsp;<span class="en">Feature</span>.
+            </span>
+          </label>
+        </li>
+        <li class="option-item">
+          <input type="radio" name="q5" id="q5-d" value="phased" />
+          <label for="q5-d">
+            <span class="radio-dot"></span>
+            <span class="option-text">
+              على مراحل: أثناء التطوير وبعد اكتمال الـ&nbsp;<span class="en">Feature</span>.
+            </span>
+          </label>
+        </li>
+      </ul>
+
+      <!-- Other -->
+      <div class="other-option">
+        <input type="radio" name="q5" id="q5-other" value="other" />
+        <label for="q5-other">
+          <span class="radio-dot"></span>
+          <span class="option-text">Other — غير ذلك</span>
+        </label>
+        <textarea
+          class="other-input"
+          id="q5-other-text"
+          placeholder="اكتب إجابتك هنا…"
+          aria-label="إجابة أخرى للسؤال الخامس"
+        ></textarea>
+      </div>
+
+      <!-- Notes -->
+      <div class="notes-section">
+        <p class="notes-label">ملاحظات المشرف</p>
+        <textarea
+          class="notes-textarea"
+          id="q5-notes"
+          placeholder="أضف أي تعليق أو توضيح تراه مناسبًا…"
+          aria-label="ملاحظات المشرف على السؤال الخامس"
+        ></textarea>
+      </div>
+
+      <nav class="card-nav" aria-label="تنقل بين الأسئلة">
+        <button class="btn btn-ghost" onclick="goTo(4)" id="q5-prev" aria-label="السؤال السابق">
+          <span class="arrow">→</span> السابق
+        </button>
+        <button class="btn btn-success" onclick="showSummary()" id="q5-finish" aria-label="إنهاء وعرض الملخص">
+          إنهاء وعرض الملخص ✓
+        </button>
+      </nav>
+    </article>
+
+    <!-- ══════════════════════════════════════════
+         Summary Screen
+    ══════════════════════════════════════════ -->
+    <section class="summary-screen" id="summaryScreen" aria-label="ملخص الإجابات">
+      <div class="summary-icon">✓</div>
+      <h2>تم الانتهاء من جميع الأسئلة</h2>
+      <p>فيما يلي ملخص لإجابات المشرف على أسئلة الدفعة الأولى.</p>
+
+      <ul class="summary-list" id="summaryList"></ul>
+
+      <div class="summary-actions">
+        <button class="btn btn-ghost" onclick="goTo(1)">
+          <span class="arrow">→</span> مراجعة الأسئلة
+        </button>
+        <button class="btn btn-primary" onclick="window.print()">
+          طباعة الملخص 🖨
+        </button>
+      </div>
+    </section>
+
+  </div><!-- /.card-container -->
+
+  <!-- ─────────────────────────────────────────────────
+       JavaScript
+  ───────────────────────────────────────────────── -->
+  <script>
+    const TOTAL = 5;
+    let current = 1;
+
+    /* ── Metadata ── */
+    const meta = {
+      1: { id: 'DEV-001',  title: 'استراتيجية تطوير الـ Feature' },
+      2: { id: 'DEV-002',  title: 'نطاق الـ Sprint'               },
+      3: { id: 'DEV-003',  title: 'ترتيب مكونات الـ Feature'     },
+      4: { id: 'DEV-004',  title: 'اكتمال الـ Feature'            },
+      5: { id: 'TEST-001', title: 'الاختبار أثناء التطوير'        },
+    };
+
+    /* ── Navigation ── */
+    function goTo(n) {
+      document.getElementById('q' + current).classList.remove('active');
+      document.getElementById('summaryScreen').classList.remove('active');
+      document.getElementById('progressWrapper').style.display = '';
+
+      current = n;
+      document.getElementById('q' + n).classList.add('active');
+      updateProgress(n);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function updateProgress(n) {
+      const pct = (n / TOTAL) * 100;
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('progressLabel').textContent  = 'السؤال ' + n + ' من ' + TOTAL;
+      document.getElementById('progressCount').textContent  = 'Question ' + n + ' of ' + TOTAL;
+    }
+
+    /* ── Show / hide "Other" textarea ── */
+    function bindOtherRadio(qNum) {
+      const radios     = document.querySelectorAll('input[name="q' + qNum + '"]');
+      const otherInput = document.getElementById('q' + qNum + '-other-text');
+      radios.forEach(r => {
+        r.addEventListener('change', () => {
+          if (r.value === 'other' && r.checked) {
+            otherInput.classList.add('visible');
+            otherInput.focus();
+          } else {
+            otherInput.classList.remove('visible');
+          }
+        });
+      });
+    }
+
+    for (let i = 1; i <= TOTAL; i++) bindOtherRadio(i);
+
+    /* ── Summary ── */
+    function getAnswer(n) {
+      const checked = document.querySelector('input[name="q' + n + '"]:checked');
+      if (!checked) return null;
+      if (checked.value === 'other') {
+        const txt = document.getElementById('q' + n + '-other-text').value.trim();
+        return txt ? 'Other: ' + txt : 'Other';
+      }
+      return checked.parentElement.querySelector('.option-text').innerText.trim();
+    }
+
+    function showSummary() {
+      document.getElementById('q5').classList.remove('active');
+      document.getElementById('progressWrapper').style.display = 'none';
+
+      const list = document.getElementById('summaryList');
+      list.innerHTML = '';
+
+      for (let i = 1; i <= TOTAL; i++) {
+        const answer = getAnswer(i);
+        const notes  = document.getElementById('q' + i + '-notes').value.trim();
+        const row    = document.createElement('li');
+        row.className = 'summary-row';
+
+        const answerHtml = answer
+          ? `<div class="summary-row-answer">${answer}</div>`
+          : `<div class="summary-row-answer unanswered">لم يتم الاختيار</div>`;
+
+        const notesHtml = notes
+          ? `<div class="summary-row-q" style="margin-top:6px;color:#6b9fd4;">📝 ${notes}</div>`
+          : '';
+
+        row.innerHTML = `
+          <span class="summary-row-id">${meta[i].id}</span>
+          <div class="summary-row-content">
+            <div class="summary-row-q">${meta[i].title}</div>
+            ${answerHtml}
+            ${notesHtml}
+          </div>
+        `;
+        list.appendChild(row);
+      }
+
+      document.getElementById('summaryScreen').classList.add('active');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    /* ── Print styles ── */
+    const printStyle = document.createElement('style');
+    printStyle.textContent = `
+      @media print {
+        body { background: #fff; color: #000; padding: 20px; }
+        .page-header h1 { color: #000; }
+        .page-header p, .progress-wrapper { display: none; }
+        .summary-screen { display: block !important; box-shadow: none; border: 1px solid #ccc; }
+        .summary-actions { display: none; }
+        .summary-row-answer { color: #000 !important; }
+        .summary-row-id { background: #eee; color: #333; }
+        .summary-row-q { color: #555 !important; }
+      }
+    `;
+    document.head.appendChild(printStyle);
+  </script>
+
+</body>
+</html>
