@@ -10,6 +10,7 @@ import '../../../../core/widgets/buttons/hamula_button.dart';
 class OrderPublishedModalSheet extends StatelessWidget {
   final String orderId;
   final String routeSummary;
+  final String? targetDescription;
   final VoidCallback onReturnHome;
   final VoidCallback onViewOffers;
 
@@ -17,6 +18,7 @@ class OrderPublishedModalSheet extends StatelessWidget {
     super.key,
     required this.orderId,
     required this.routeSummary,
+    this.targetDescription,
     required this.onReturnHome,
     required this.onViewOffers,
   });
@@ -25,6 +27,7 @@ class OrderPublishedModalSheet extends StatelessWidget {
     BuildContext context, {
     required String orderId,
     required String routeSummary,
+    String? targetDescription,
     required VoidCallback onReturnHome,
     required VoidCallback onViewOffers,
   }) {
@@ -35,6 +38,7 @@ class OrderPublishedModalSheet extends StatelessWidget {
       builder: (ctx) => OrderPublishedModalSheet(
         orderId: orderId,
         routeSummary: routeSummary,
+        targetDescription: targetDescription,
         onReturnHome: () {
           Navigator.of(ctx).pop();
           onReturnHome();
@@ -150,15 +154,43 @@ class OrderPublishedModalSheet extends StatelessWidget {
                 ),
               ),
             ),
+            if (targetDescription != null && targetDescription!.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFBFDBFE)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.send_rounded, size: 13, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 6),
+                      Text(
+                        'نُشر إلى: $targetDescription',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1D4ED8),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
 
-            // Primary Action: View Offers
+            // Primary Action: عرض الطلب
             HamulaButton(
-              label: AppStrings.viewOffersBtn,
+              label: 'عرض الطلب',
               onPressed: onViewOffers,
               variant: HamulaButtonVariant.primary,
               size: HamulaButtonSize.lg,
-              icon: const Icon(Icons.local_offer_outlined, size: 18),
+              icon: const Icon(Icons.assignment_outlined, size: 18),
             ),
             const SizedBox(height: 10),
 

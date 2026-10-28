@@ -4,9 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_application/core/constants/app_strings.dart';
 import 'package:flutter_application/core/theme/app_theme.dart';
+import 'package:flutter_application/features/merchant/domain/models/merchant_order.dart';
+import 'package:flutter_application/features/merchant/domain/models/merchant_simulation_store.dart';
 import 'package:flutter_application/features/merchant/domain/models/transport_order_draft.dart';
 import 'package:flutter_application/features/merchant/presentation/screens/driver_profile_screen.dart';
 import 'package:flutter_application/features/merchant/presentation/screens/merchant_create_order_screen.dart';
+import 'package:flutter_application/features/merchant/presentation/screens/select_driver_screen.dart';
 import 'package:flutter_application/features/merchant/presentation/screens/select_office_screen.dart';
 
 void main() {
@@ -24,10 +27,11 @@ void main() {
   }
 
   group('MerchantCreateOrderScreen Tests', () {
-    testWidgets('renders all 7 cards and responds to back action', (tester) async {
+    testWidgets('renders strict title «إضافة طلب», 5 cards, mini-map, and responds to back action',
+        (tester) async {
       bool backTapped = false;
 
-      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.physicalSize = const Size(800, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
@@ -40,25 +44,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Verify Header
+      // Verify Header: strictly «إضافة طلب»
       expect(find.text(AppStrings.createOrderTitle), findsOneWidget);
       expect(find.text(AppStrings.createOrderSubtitle), findsOneWidget);
 
-      // Verify Cards
-      expect(find.text(AppStrings.orderLocationsTitle), findsOneWidget);
-      expect(find.text(AppStrings.requestedCargoTitle), findsOneWidget);
-      expect(find.text(AppStrings.transportRequirementsTitle), findsOneWidget);
-      expect(find.text(AppStrings.expectedBudgetTitle), findsOneWidget);
-      expect(find.text(AppStrings.publishOrderToTitle), findsOneWidget);
-      expect(find.text(AppStrings.additionalInfoTitle), findsOneWidget);
-      expect(find.text(AppStrings.contactInfoTitle), findsOneWidget);
+      // Verify 5 Cards
+      expect(find.textContaining('1. مواقع النقل'), findsOneWidget);
+      expect(find.textContaining('2. الحمولة المطلوب نقلها'), findsOneWidget);
+      expect(find.textContaining('3. متطلبات النقل'), findsOneWidget);
+      expect(find.textContaining('4. الميزانية المتوقعة (اختياري)'), findsOneWidget);
+      expect(find.textContaining('5. ملاحظات إضافية (اختياري)'), findsOneWidget);
+
+      // Verify Mini-map route estimates
+      expect(find.text('المسافة التقديرية'), findsOneWidget);
+      expect(find.text('المدة التقديرية'), findsOneWidget);
+      expect(find.text('عرض المسار الكامل'), findsOneWidget);
+
+      // Verify Bottom Buttons
+      expect(find.text('حفظ الطلب'), findsOneWidget);
+      expect(find.text('نشر الطلب'), findsOneWidget);
 
       // Verify Back action
       await tester.tap(find.byTooltip(AppStrings.back));
       expect(backTapped, isTrue);
     });
 
-    testWidgets('submits order, opens review modal, and triggers callback on confirm',
+    testWidgets('saves order as draft into MerchantSimulationStore under status draft',
         (tester) async {
       TransportOrderDraft? submittedDraft;
 
@@ -75,87 +86,215 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Find Publish button
-      final publishBtn = find.text(AppStrings.submitTransportOrderBtn);
-      expect(publishBtn, findsOneWidget);
-      await tester.ensureVisible(publishBtn);
-      await tester.tap(publishBtn);
+      final initialDraftCount = MerchantSimulationStore.instance.orders
+          .where((o) => o.status == MerchantOrderStatus.draft)
+          .length;
+
+      // Find and tap «حفظ الطلب»
+      final saveDraftBtn = find.text('حفظ الطلب');
+      expect(saveDraftBtn, findsOneWidget);
+      await tester.ensureVisible(saveDraftBtn);
+      await tester.tap(saveDraftBtn);
       await tester.pumpAndSettle();
 
-      // Review Modal Sheet should be visible
-      expect(find.text(AppStrings.reviewOrderTitle), findsOneWidget);
-      expect(find.text(AppStrings.confirmPublishBtn), findsWidgets);
-
-      // Tap confirm in modal sheet
-      await tester.tap(find.text(AppStrings.confirmPublishBtn).last);
-      await tester.pumpAndSettle();
-
-      // Verify submitted draft
+      // Verify draft callback was triggered
       expect(submittedDraft, isNotNull);
       expect(submittedDraft!.originCity, equals('صنعاء'));
-      expect(submittedDraft!.destCity, equals('عدن'));
+      expect(submittedDraft!.destCity, equals('الرياض'));
 
-      // Success modal should now be shown
-      expect(find.text(AppStrings.orderPublishedSuccessTitle), findsOneWidget);
+      // Verify draft exists in MerchantSimulationStore
+      final newDraftCount = MerchantSimulationStore.instance.orders
+          .where((o) => o.status == MerchantOrderStatus.draft)
+          .length;
+      expect(newDraftCount, equals(initialDraftCount + 1));
+
+      // SnackBar should confirm draft saved
+      expect(find.textContaining('تم حفظ مسودة الطلب بنجاح'), findsOneWidget);
     });
 
-    testWidgets(
-        'opens map picker for origin location, selects landmark, and populates detailed address',
+    testWidgets('tapping «نشر الطلب» opens PublishTargetModalSheet and publishes to all drivers',
         (tester) async {
-      TransportOrderDraft? submittedDraft;
-
-      tester.view.physicalSize = const Size(800, 1200);
+      tester.view.physicalSize = const Size(800, 2000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
       await tester.pumpWidget(
         wrapWidget(
-          MerchantCreateOrderScreen(
-            onSubmitOrder: (draft) => submittedDraft = draft,
-          ),
+          const MerchantCreateOrderScreen(),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Verify 'تحديد من الخريطة' buttons are present
-      final pickMapButtons = find.text('تحديد من الخريطة');
+      // Tap «نشر الطلب»
+      final publishBtn = find.text('نشر الطلب');
+      await tester.ensureVisible(publishBtn);
+      await tester.tap(publishBtn);
+      await tester.pumpAndSettle();
+
+      // Verify Publish Target Modal is displayed with the 4 options
+      expect(find.text('نشر طلب النقل'), findsOneWidget);
+      expect(find.text('جميع السائقين'), findsOneWidget);
+      expect(find.text('سائق محدد'), findsOneWidget);
+      expect(find.text('جميع مكاتب النقل'), findsOneWidget);
+      expect(find.text('مكتب نقل محدد'), findsOneWidget);
+
+      // Tap «متابعة» to publish to all drivers (default selected option)
+      final continueBtn = find.text('متابعة');
+      expect(continueBtn, findsOneWidget);
+      await tester.tap(continueBtn);
+      await tester.pumpAndSettle();
+
+      // Verify Success Modal appears
+      expect(find.text(AppStrings.orderPublishedSuccessTitle), findsOneWidget);
+      expect(find.text('عرض الطلب'), findsOneWidget);
+      expect(find.text('العودة للرئيسية'), findsOneWidget);
+    });
+
+    testWidgets('validates min budget cannot exceed max budget and displays inline error',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        wrapWidget(
+          const MerchantCreateOrderScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Enter min budget > max budget
+      final textFields = find.byType(TextField);
+      // Index 0: origin detail, 1: dest detail, 2: loading date, 3: min budget, 4: max budget
+      await tester.enterText(textFields.at(3), '5000');
+      await tester.enterText(textFields.at(4), '2000');
+      await tester.pumpAndSettle();
+
+      // Tap «نشر الطلب»
+      final publishBtn = find.text('نشر الطلب');
+      await tester.ensureVisible(publishBtn);
+      await tester.tap(publishBtn);
+      await tester.pumpAndSettle();
+
+      // Verify inline error message is shown
+      expect(
+        find.textContaining('الحد الأدنى للميزانية لا يمكن أن يتجاوز الحد الأعلى'),
+        findsWidgets,
+      );
+
+      // Publish Target Modal must NOT open
+      expect(find.text('نشر طلب النقل'), findsNothing);
+    });
+
+    testWidgets('opens map picker for origin location and updates route',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        wrapWidget(
+          const MerchantCreateOrderScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify 'الخريطة' buttons are present
+      final pickMapButtons = find.text('الخريطة');
       expect(pickMapButtons, findsWidgets);
 
-      // Tap first map picker button (for Origin Location)
+      // Tap first map picker button (Origin)
       await tester.tap(pickMapButtons.first);
       await tester.pumpAndSettle();
 
       // Verify Map Location Picker Modal is displayed
       expect(find.text('تحديد موقع التحميل من الخريطة'), findsOneWidget);
 
-      // Tap confirm button in modal sheet
+      // Confirm in modal
       final confirmLocationBtn = find.textContaining('تأكيد هذا الموقع');
       expect(confirmLocationBtn, findsOneWidget);
       await tester.tap(confirmLocationBtn);
       await tester.pumpAndSettle();
 
-      // Modal closed, verify origin address field contains city/location
+      // Modal closed, origin city remains active
       expect(find.textContaining('صنعاء'), findsWidgets);
+    });
+  });
 
-      // Type detailed landmark address into origin text field
-      final originDetailInput = find.byType(TextField).first;
-      await tester.enterText(
-          originDetailInput, 'صنعاء — شارع الستين الجنوبي، مخازن الأمل رقم 4');
+  group('SelectDriverScreen Tests', () {
+    testWidgets('renders verified drivers list with ratings, filters by search, and selects available driver',
+        (tester) async {
+      DriverProfile? selectedDriver;
+      bool backTapped = false;
+
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        wrapWidget(
+          SelectDriverScreen(
+            onBack: () => backTapped = true,
+            onDriverSelected: (drv) => selectedDriver = drv,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      // Submit the order
-      final publishBtn = find.text(AppStrings.submitTransportOrderBtn);
-      await tester.ensureVisible(publishBtn);
-      await tester.tap(publishBtn);
+      // Verify Header and Search Field
+      expect(find.text('اختيار سائق محدد'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
+
+      // Verify Driver Cards from Mockup Image 4
+      expect(find.text('أحمد القحطاني'), findsOneWidget);
+      expect(find.text('محمد العتيبي'), findsOneWidget);
+      expect(find.text('خالد الشهري'), findsOneWidget); // Busy driver
+      expect(find.text('سالم الدوسري'), findsOneWidget);
+
+      // Verify 'مشغول حالياً' tag for Khaled Al-Shehri
+      expect(find.text('مشغول حالياً'), findsOneWidget);
+
+      // Tap 'اختيار' on first available driver (Ahmad Al-Qahtani)
+      final selectButtons = find.text('اختيار');
+      expect(selectButtons, findsWidgets);
+      await tester.tap(selectButtons.first);
       await tester.pumpAndSettle();
 
-      // Confirm in Review modal
-      await tester.tap(find.text(AppStrings.confirmPublishBtn).last);
+      expect(selectedDriver, isNotNull);
+      expect(selectedDriver!.name, equals('أحمد القحطاني'));
+
+      // Test Back button
+      await tester.tap(find.byTooltip(AppStrings.back));
+      expect(backTapped, isTrue);
+    });
+
+    testWidgets('toggles between list view and map view with driver markers',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        wrapWidget(
+          const SelectDriverScreen(),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      // Verify submitted draft contains the detailed address
-      expect(submittedDraft, isNotNull);
-      expect(submittedDraft!.originAddressDetail, contains('مخازن الأمل'));
+      // Switch to Map View via button
+      final mapToggle = find.text('الخريطة');
+      await tester.tap(mapToggle);
+      await tester.pumpAndSettle();
+
+      // Verify map mode with "عرض في القائمة" button
+      expect(find.text('عرض في القائمة'), findsOneWidget);
+
+      // Switch back to list view
+      await tester.tap(find.text('عرض في القائمة'));
+      await tester.pumpAndSettle();
+
+      // List is back
+      expect(find.text('أحمد القحطاني'), findsOneWidget);
     });
   });
 
@@ -265,9 +404,18 @@ void main() {
       expect(find.text('مناطق الخدمة'), findsOneWidget);
       expect(find.text('تقييمات العملاء'), findsOneWidget);
 
-      // Tap Direct Order CTA ("طلب نقل")
+      // Tap Direct Order CTA ("طلب نقل") to open Order Selection Modal
       final directOrderBtn = find.text('طلب نقل');
       await tester.tap(directOrderBtn);
+      await tester.pumpAndSettle();
+
+      // Verify Case A Modal appears with available orders
+      expect(find.textContaining('اختر طلباً موجوداً أو أنشئ طلباً جديداً'), findsOneWidget);
+      expect(find.text('إسناد للسائق'), findsWidgets);
+
+      // Tap assign to driver on the first pending order
+      await tester.tap(find.text('إسناد للسائق').first);
+      await tester.pumpAndSettle();
       expect(directOrderTapped, isTrue);
 
       // Tap Message CTA ("مراسلة")
@@ -278,6 +426,23 @@ void main() {
       // Tap Back Button
       await tester.tap(find.byTooltip(AppStrings.back));
       expect(backTapped, isTrue);
+    });
+
+    testWidgets('renders perfectly on narrow mobile width (360px) without overflow exceptions', (tester) async {
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        wrapWidget(
+          const DriverProfileScreen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('معلومات المركبة'), findsOneWidget);
+      expect(find.text('مرسيدس أكتروس'), findsOneWidget);
     });
   });
 }

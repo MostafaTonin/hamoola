@@ -136,6 +136,70 @@ class DriverProfile {
         'سائق ممتاز جداً. التزم بالموعد وكان حريصاً على سلامة البضائع. أنصح بالتعامل معه.',
     latestReviewRating: 5.0,
   );
+
+  static const List<DriverProfile> demoDrivers = [
+    DriverProfile(
+      id: 'DRV-201',
+      name: 'أحمد القحطاني',
+      profession: 'سائق نقل ثقيل معتمد',
+      rating: 4.8,
+      reviewsCount: 120,
+      isVerified: true,
+      isOnline: true,
+      city: 'صنعاء',
+      distance: '5 كم',
+      vehicleType: 'شاحنة',
+      vehicleModel: 'مرسيدس أكتروس',
+      capacity: '25 طن',
+      phone: '771234567',
+    ),
+    DriverProfile(
+      id: 'DRV-202',
+      name: 'محمد العتيبي',
+      profession: 'سائق قاطرات معتمد',
+      rating: 4.6,
+      reviewsCount: 95,
+      isVerified: true,
+      isOnline: true,
+      city: 'صنعاء',
+      distance: '12 كم',
+      vehicleType: 'قاطرة',
+      vehicleModel: 'فولفو FH',
+      capacity: '30 طن',
+      phone: '772345678',
+    ),
+    DriverProfile(
+      id: 'DRV-203',
+      name: 'خالد الشهري',
+      profession: 'سائق دينا وشاحنات خفيفة',
+      rating: 4.5,
+      reviewsCount: 78,
+      isVerified: true,
+      isOnline: false, // مشغول حالياً!
+      city: 'صنعاء',
+      distance: '18 كم',
+      vehicleType: 'دينا',
+      vehicleModel: 'إيسوزو NPR',
+      capacity: '6 طن',
+      phone: '773456789',
+    ),
+    DriverProfile(
+      id: 'DRV-204',
+      name: 'سالم الدوسري',
+      profession: 'سائق شاحنات مبردة',
+      rating: 4.4,
+      reviewsCount: 64,
+      isVerified: true,
+      isOnline: true,
+      city: 'عدن',
+      distance: '22 كم',
+      vehicleType: 'شاحنة تبريد',
+      vehicleModel: 'مان TGM',
+      capacity: '18 طن',
+      phone: '774567890',
+    ),
+    demoDriver,
+  ];
 }
 
 class TransportOffice {
@@ -259,8 +323,8 @@ class TransportOrderDraft {
     required this.target,
     this.selectedDriver,
     this.selectedOffice,
-    required this.notes,
-    required this.contactMethod,
-    required this.phone,
+    this.notes = '',
+    this.contactMethod = ContactMethod.whatsapp,
+    this.phone = '',
   });
 }

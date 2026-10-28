@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimensions.dart';
+import '../../../auth/domain/models/auth_simulation_store.dart';
+import '../../../auth/domain/models/auth_user.dart';
 
 /// Screen: "بيانات السائق والرخصة" (Driver License Verification Screen).
 /// Directly matches Images 3 & 4 from the user:
@@ -54,13 +56,47 @@ class _DriverLicenseVerificationScreenState
   String _licenseCategory = 'نقل ثقيل (شاحنات وقاطرات)';
   final List<String> _licenseCategories = [
     'نقل ثقيل (شاحنات وقاطرات)',
+    'نقل ثقيل',
     'نقل متوسط (شاحنات دينا)',
-    'نقل خفيف (وانيت ودبابات)',
+    'نقل متوسط',
+    'عمومي',
     'عمومي درجة أولى',
+    'خصوصي',
+    'نقل خفيف (وانيت ودبابات)',
   ];
 
   String? _frontLicensePath = 'assets/images/license_front_preview.jpg';
   String? _backLicensePath = 'assets/images/license_back_preview.jpg';
+
+  @override
+  void initState() {
+    super.initState();
+    final user = AuthSimulationStore.instance.currentUser;
+    final savedLicense = user?.driverData?.licenseData;
+    if (savedLicense != null) {
+      if (savedLicense.licenseNumber.isNotEmpty) {
+        _licenseNumberController.text = savedLicense.licenseNumber;
+      }
+      if (savedLicense.issuePlace.isNotEmpty) {
+        _licenseIssuerController.text = savedLicense.issuePlace;
+      }
+      if (savedLicense.issueDate.isNotEmpty) {
+        _licenseIssueDateController.text = savedLicense.issueDate;
+      }
+      if (savedLicense.expiryDate.isNotEmpty) {
+        _licenseExpiryDateController.text = savedLicense.expiryDate;
+      }
+      if (savedLicense.licenseCategory.isNotEmpty) {
+        _licenseCategory = savedLicense.licenseCategory;
+      }
+      if (savedLicense.frontPhotoPath != null) {
+        _frontLicensePath = savedLicense.frontPhotoPath;
+      }
+      if (savedLicense.backPhotoPath != null) {
+        _backLicensePath = savedLicense.backPhotoPath;
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -180,8 +216,32 @@ class _DriverLicenseVerificationScreenState
 
   void _handleContinue() {
     if (_formKey.currentState?.validate() ?? true) {
+      final licenseData = DriverLicenseData(
+        licenseNumber: _licenseNumberController.text.trim(),
+        licenseCategory: _licenseCategory,
+        issuePlace: _licenseIssuerController.text.trim(),
+        issueDate: _licenseIssueDateController.text.trim(),
+        expiryDate: _licenseExpiryDateController.text.trim(),
+        frontPhotoPath: _frontLicensePath,
+        backPhotoPath: _backLicensePath,
+      );
+      final user = AuthSimulationStore.instance.currentUser;
+      if (user != null) {
+        AuthSimulationStore.instance.saveDriverProgress(
+          userId: user.id,
+          licenseData: licenseData,
+        );
+      }
       widget.onNext?.call();
     }
+  }
+
+  void _handleSkip() {
+    final user = AuthSimulationStore.instance.currentUser;
+    if (user != null) {
+      AuthSimulationStore.instance.skipDriverVerification(user.id);
+    }
+    widget.onSkip?.call();
   }
 
   @override
@@ -307,37 +367,51 @@ class _DriverLicenseVerificationScreenState
   }
 
   Widget _buildStatusPill() {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-        decoration: BoxDecoration(
-          color: const Color(0xFFFFFBEB),
-          borderRadius: BorderRadius.circular(20.0),
-          border: Border.all(color: const Color(0xFFFDE68A)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.badge_outlined,
-              color: Color(0xFFE67E22),
-              size: 18.0,
+    return Column(
+      children: [
+        Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB),
+              borderRadius: BorderRadius.circular(20.0),
+              border: Border.all(color: const Color(0xFFFDE68A)),
             ),
-            const SizedBox(width: 8.0),
-            Flexible(
-              child: Text(
-                'بيانات رخصة القيادة',
-                style: GoogleFonts.cairo(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFFB45309),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.badge_outlined,
+                  color: Color(0xFFE67E22),
+                  size: 18.0,
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
+                const SizedBox(width: 8.0),
+                Flexible(
+                  child: Text(
+                    'بيانات رخصة القيادة',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFFB45309),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ),
+        const SizedBox(height: 8.0),
+        Text(
+          'أدخل بيانات رخصة القيادة للتحقق من أهليتك لتقديم خدمة النقل في حمولة.',
+          style: GoogleFonts.cairo(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF64748B),
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 
@@ -543,20 +617,20 @@ class _DriverLicenseVerificationScreenState
           children: [
             Expanded(
               child: _buildDocCard(
-                title: 'صورة الرخصة (الخلف)',
-                photoPath: _backLicensePath,
-                onDelete: () => setState(() => _backLicensePath = null),
-                onChange: () => _handlePhotoUploadOrChange('back'),
+                title: 'صورة الرخصة (الأمام)',
+                photoPath: _frontLicensePath,
+                onDelete: () => setState(() => _frontLicensePath = null),
+                onChange: () => _handlePhotoUploadOrChange('front'),
                 isDark: isDark,
               ),
             ),
             const SizedBox(width: 12.0),
             Expanded(
               child: _buildDocCard(
-                title: 'صورة الرخصة (الأمام)',
-                photoPath: _frontLicensePath,
-                onDelete: () => setState(() => _frontLicensePath = null),
-                onChange: () => _handlePhotoUploadOrChange('front'),
+                title: 'صورة الرخصة (الخلف)',
+                photoPath: _backLicensePath,
+                onDelete: () => setState(() => _backLicensePath = null),
+                onChange: () => _handlePhotoUploadOrChange('back'),
                 isDark: isDark,
               ),
             ),
@@ -731,7 +805,7 @@ class _DriverLicenseVerificationScreenState
             width: double.infinity,
             height: 44.0,
             child: OutlinedButton(
-              onPressed: widget.onSkip ?? () => Navigator.maybePop(context),
+              onPressed: _handleSkip,
               style: OutlinedButton.styleFrom(
                 side: BorderSide(
                   color: isDark ? Colors.white.withValues(alpha: 0.15) : const Color(0xFFE2E8F0),

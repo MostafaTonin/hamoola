@@ -4,31 +4,18 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimensions.dart';
+import '../../../auth/domain/models/auth_simulation_store.dart';
+import '../../../auth/domain/models/auth_user.dart';
 
-/// Screen: "بيانات مركبتك" (Driver Vehicle Verification Screen - Step 2).
-/// Directly matches the user's screenshots:
-/// - Header with "بيانات مركبتك" and rounded back button
-/// - Section 1 Status badge: "[🚚] بيانات المركبة الأساسية"
-///   1. "نوع المركبة" (Dropdown: شاحنة نقل)
-///   2. "فئة المركبة" (نقل ثقيل)
-///   3. "الماركة" (مرسيدس)
-///   4. "الموديل" (أكتروس)
-///   5. "سنة الصنع" (2023)
-///   6. "رقم اللوحة" (7198 د ح ي)
-///   7. "لون المركبة" (أبيض)
-/// - Section 2 Status badge: "[⬡] قدرات المركبة"
-///   8. "الحمولة القصوى" (25)
-///   9. "وحدة القياس" (Dropdown: طن)
-///   10. "نوع الهيكل" (Dropdown: صندوق مغلق)
-///   11. "سعة المركبة (اختياري)" (65 م³)
-/// - Section 3: "صور المركبة"
-///   4 Photo Cards (2x2 grid):
-///   1. صورة المركبة من الأمام (`vehicle_front_preview.jpg`)
-///   2. صورة المركبة من الخلف (`vehicle_back_preview.jpg`)
-///   3. صورة جانبية للمركبة (`vehicle_side_preview.jpg`)
-///   4. صورة لوحة المركبة (`vehicle_plate_preview.jpg`)
-///   With (✕) delete button and "تغيير الصورة" interactive photo management.
-/// - Sticky actions: "توثيق الحساب" & "تخطي الآن"
+/// Screen: "بيانات الناقلة" (Driver Vehicle Verification Screen - Step 3).
+/// Matches Prompt 04 specifications while preserving full compatibility:
+/// - Header with "بيانات الناقلة" and "بيانات مركبتك"
+/// - Subtitle: «أدخل بيانات الناقلة التي ستستخدمها لتقديم خدمات النقل عبر حمولة.»
+/// - Section 1: بيانات المركبة الأساسية (نوع المركبة, فئة, ماركة, موديل, سنة, لوحة, لون)
+/// - Section 2: قدرات المركبة (حمولة قصوى, وحدة القياس, نوع الهيكل, سعة المركبة)
+/// - Section 3: صور ومستندات المركبة (4 صور مع إمكانية التعديل والحذف)
+/// - Section 4: معلومات الخدمة ونطاق العمل (أنواع الحمولات, مناطق الخدمة, ملاحظات تشغيلية)
+/// - Actions: "إرسال طلب التوثيق" (يحول الحالة إلى pending_review) و "تخطي الآن" (يحول إلى unverified)
 class DriverVehicleVerificationScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final VoidCallback? onSkip;
@@ -51,31 +38,32 @@ class _DriverVehicleVerificationScreenState
   final _formKey = GlobalKey<FormState>();
 
   // Basic vehicle controllers
-  final TextEditingController _categoryController =
-      TextEditingController(text: 'نقل ثقيل');
-  final TextEditingController _brandController =
-      TextEditingController(text: 'مرسيدس');
-  final TextEditingController _modelController =
-      TextEditingController(text: 'أكتروس');
-  final TextEditingController _yearController =
-      TextEditingController(text: '2023');
-  final TextEditingController _plateNumberController =
-      TextEditingController(text: '7198 د ح ي');
-  final TextEditingController _colorController =
-      TextEditingController(text: 'أبيض');
+  late final TextEditingController _categoryController;
+  late final TextEditingController _brandController;
+  late final TextEditingController _modelController;
+  late final TextEditingController _yearController;
+  late final TextEditingController _plateNumberController;
+  late final TextEditingController _colorController;
 
   // Capability controllers
-  final TextEditingController _maxCapacityController =
-      TextEditingController(text: '25');
-  final TextEditingController _volumeController =
-      TextEditingController(text: '65 م³');
+  late final TextEditingController _maxCapacityController;
+  late final TextEditingController _volumeController;
+
+  // Service & Operational Info controllers (Prompt 04 section 6.d)
+  late final TextEditingController _cargoTypesController;
+  late final TextEditingController _serviceAreasController;
+  late final TextEditingController _operatingNotesController;
 
   String _vehicleType = 'شاحنة نقل';
   final List<String> _vehicleTypes = [
     'شاحنة نقل',
+    'قاطرة مع مقطورة',
+    'دينا',
+    'شاحنة تبريد',
+    'قلاب',
+    'ناقلة أخرى',
     'شاحنة تبريد (براد)',
     'قاطرة سطحة',
-    'شاحنة قلاب',
     'شاحنة صهريج (تانكر)',
   ];
 
@@ -103,6 +91,76 @@ class _DriverVehicleVerificationScreenState
   bool _isSubmitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    final store = AuthSimulationStore.instance;
+    final currentUser = store.currentUser ?? store.pendingRegistrationUser;
+    final savedVehicle = currentUser?.driverData?.vehicleData;
+
+    _categoryController = TextEditingController(
+      text: savedVehicle?.category ?? 'نقل ثقيل',
+    );
+    _brandController = TextEditingController(
+      text: savedVehicle?.manufacturer ?? 'مرسيدس',
+    );
+    _modelController = TextEditingController(
+      text: savedVehicle?.model ?? 'أكتروس',
+    );
+    _yearController = TextEditingController(
+      text: savedVehicle?.year ?? '2023',
+    );
+    _plateNumberController = TextEditingController(
+      text: savedVehicle?.plateNumber ?? '7198 د ح ي',
+    );
+    _colorController = TextEditingController(
+      text: savedVehicle?.color ?? 'أبيض',
+    );
+
+    _maxCapacityController = TextEditingController(
+      text: savedVehicle?.maxCapacity ?? '25',
+    );
+    _volumeController = TextEditingController(
+      text: savedVehicle?.volume ?? '65 م³',
+    );
+
+    _cargoTypesController = TextEditingController(
+      text: savedVehicle != null && savedVehicle.cargoTypes.isNotEmpty
+          ? savedVehicle.cargoTypes.join('، ')
+          : 'بضائع عامة، مواد بناء، أثاث ومعدات',
+    );
+    _serviceAreasController = TextEditingController(
+      text: savedVehicle != null && savedVehicle.serviceAreas.isNotEmpty
+          ? savedVehicle.serviceAreas.join('، ')
+          : 'صنعاء، عدن، تعز، الحديدة، مأرب، كافة المحافظات',
+    );
+    _operatingNotesController = TextEditingController(
+      text: savedVehicle?.operatingNotes ??
+          'جاهز للنقل بين المحافظات مع الالتزام التام بالمواعيد وتأمين الحمولة',
+    );
+
+    if (savedVehicle != null) {
+      if (_vehicleTypes.contains(savedVehicle.vehicleType)) {
+        _vehicleType = savedVehicle.vehicleType;
+      }
+      if (_bodyTypes.contains(savedVehicle.bodyType)) {
+        _bodyType = savedVehicle.bodyType;
+      }
+      if (savedVehicle.frontPhotoPath != null) {
+        _frontPhotoPath = savedVehicle.frontPhotoPath;
+      }
+      if (savedVehicle.backPhotoPath != null) {
+        _backPhotoPath = savedVehicle.backPhotoPath;
+      }
+      if (savedVehicle.sidePhotoPath != null) {
+        _sidePhotoPath = savedVehicle.sidePhotoPath;
+      }
+      if (savedVehicle.platePhotoPath != null) {
+        _platePhotoPath = savedVehicle.platePhotoPath;
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _categoryController.dispose();
     _brandController.dispose();
@@ -112,6 +170,9 @@ class _DriverVehicleVerificationScreenState
     _colorController.dispose();
     _maxCapacityController.dispose();
     _volumeController.dispose();
+    _cargoTypesController.dispose();
+    _serviceAreasController.dispose();
+    _operatingNotesController.dispose();
     super.dispose();
   }
 
@@ -198,7 +259,61 @@ class _DriverVehicleVerificationScreenState
   }
 
   void _submitVerification() {
+    if (_isSubmitting) return;
     setState(() => _isSubmitting = true);
+
+    final store = AuthSimulationStore.instance;
+    final user = store.currentUser ?? store.pendingRegistrationUser;
+    final userId = user?.id ?? 'USR-DRIVER-01';
+
+    final cargoList = _cargoTypesController.text
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final areasList = _serviceAreasController.text
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    final vehicleData = DriverVehicleData(
+      vehicleType: _vehicleType,
+      category: _categoryController.text.trim(),
+      manufacturer: _brandController.text.trim(),
+      model: _modelController.text.trim(),
+      year: _yearController.text.trim(),
+      plateNumber: _plateNumberController.text.trim(),
+      color: _colorController.text.trim(),
+      maxCapacity: _maxCapacityController.text.trim(),
+      bodyType: _bodyType,
+      volume: _volumeController.text.trim(),
+      frontPhotoPath: _frontPhotoPath,
+      backPhotoPath: _backPhotoPath,
+      sidePhotoPath: _sidePhotoPath,
+      platePhotoPath: _platePhotoPath,
+      cargoTypes: cargoList.isNotEmpty ? cargoList : const ['بضائع عامة'],
+      serviceAreas: areasList.isNotEmpty ? areasList : const ['كافة المحافظات'],
+      operatingNotes: _operatingNotesController.text.trim(),
+    );
+
+    // Save partial vehicle progress
+    store.saveDriverProgress(userId: userId, vehicleData: vehicleData);
+
+    // Gather overall driver verification data
+    final existingDriverData = user?.driverData;
+    final completeDriverData = DriverVerificationData(
+      identityData: existingDriverData?.identityData,
+      licenseData: existingDriverData?.licenseData,
+      vehicleData: vehicleData,
+      submittedAt: DateTime.now(),
+    );
+
+    // Submit to store -> switches status to pendingReview
+    store.submitDriverVerification(
+      userId: userId,
+      driverData: completeDriverData,
+    );
 
     Future.delayed(const Duration(milliseconds: 600), () {
       if (!mounted) return;
@@ -238,7 +353,7 @@ class _DriverVehicleVerificationScreenState
               ),
               const SizedBox(height: 8.0),
               Text(
-                'تم اعتماد رخصة القيادة وبيانات الشاحنة بنجاح، يمكنك الآن استقبال وتقديم عروض النقل.',
+                'تم إرسال طلب التوثيق والناقلة بنجاح، والطلب الآن قيد المراجعة والتدقيق بواسطة فريق المنصة.',
                 style: GoogleFonts.cairo(
                   fontSize: 13.0,
                   color: const Color(0xFF64748B),
@@ -275,6 +390,52 @@ class _DriverVehicleVerificationScreenState
         ),
       );
     });
+  }
+
+  void _handleSkip() {
+    final store = AuthSimulationStore.instance;
+    final user = store.currentUser ?? store.pendingRegistrationUser;
+    final userId = user?.id ?? 'USR-DRIVER-01';
+
+    final cargoList = _cargoTypesController.text
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    final areasList = _serviceAreasController.text
+        .split(RegExp(r'[,،]'))
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+
+    final vehicleData = DriverVehicleData(
+      vehicleType: _vehicleType,
+      category: _categoryController.text.trim(),
+      manufacturer: _brandController.text.trim(),
+      model: _modelController.text.trim(),
+      year: _yearController.text.trim(),
+      plateNumber: _plateNumberController.text.trim(),
+      color: _colorController.text.trim(),
+      maxCapacity: _maxCapacityController.text.trim(),
+      bodyType: _bodyType,
+      volume: _volumeController.text.trim(),
+      frontPhotoPath: _frontPhotoPath,
+      backPhotoPath: _backPhotoPath,
+      sidePhotoPath: _sidePhotoPath,
+      platePhotoPath: _platePhotoPath,
+      cargoTypes: cargoList.isNotEmpty ? cargoList : const ['بضائع عامة'],
+      serviceAreas: areasList.isNotEmpty ? areasList : const ['كافة المحافظات'],
+      operatingNotes: _operatingNotesController.text.trim(),
+    );
+
+    store.saveDriverProgress(userId: userId, vehicleData: vehicleData);
+    store.skipDriverVerification(userId);
+
+    if (widget.onSkip != null) {
+      widget.onSkip!();
+    } else {
+      Navigator.maybePop(context);
+    }
   }
 
   @override
@@ -338,7 +499,38 @@ class _DriverVehicleVerificationScreenState
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                            const SizedBox(height: 8.0),
+                            // Prompt 04 explanatory notice
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16.0),
+                              padding: const EdgeInsets.all(12.0),
+                              decoration: BoxDecoration(
+                                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(12.0),
+                                border: Border.all(
+                                  color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.local_shipping_rounded,
+                                    color: Color(0xFFE67E22),
+                                    size: 20.0,
+                                  ),
+                                  const SizedBox(width: 10.0),
+                                  Expanded(
+                                    child: Text(
+                                      '«أدخل بيانات الناقلة التي ستستخدمها لتقديم خدمات النقل عبر حمولة.»',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12.0,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
 
                             // Section 1: بيانات المركبة الأساسية
                             _buildSectionPill(
@@ -458,6 +650,37 @@ class _DriverVehicleVerificationScreenState
 
                             // Section 3: صور المركبة (4 Cards matching screenshot)
                             _buildVehiclePhotosSection(isDark),
+                            const SizedBox(height: 24.0),
+
+                            // Section 4: معلومات الخدمة ونطاق العمل (Prompt 04 section 6.d)
+                            _buildSectionPill(
+                              icon: Icons.alt_route_rounded,
+                              label: 'معلومات الخدمة ونطاق العمل',
+                            ),
+                            const SizedBox(height: 22.0),
+
+                            _buildFieldCard(
+                              label: 'أنواع الحمولات التي تستطيع نقلها',
+                              controller: _cargoTypesController,
+                              icon: Icons.inventory_2_outlined,
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 16.0),
+
+                            _buildFieldCard(
+                              label: 'مناطق ومحافظات الخدمة',
+                              controller: _serviceAreasController,
+                              icon: Icons.map_outlined,
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 16.0),
+
+                            _buildFieldCard(
+                              label: 'ملاحظات تشغيلية مختصرة',
+                              controller: _operatingNotesController,
+                              icon: Icons.edit_note_rounded,
+                              isDark: isDark,
+                            ),
                             const SizedBox(height: 24.0),
                           ],
                         ),
@@ -871,12 +1094,36 @@ class _DriverVehicleVerificationScreenState
                         valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                       ),
                     )
-                  : Text(
-                      'توثيق الحساب',
-                      style: GoogleFonts.cairo(
-                        fontSize: 15.5,
-                        fontWeight: FontWeight.w800,
-                        color: Colors.white,
+                  : FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            'إرسال طلب التوثيق',
+                            style: GoogleFonts.cairo(
+                              fontSize: 15.0,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                          const SizedBox(width: 8.0),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6.0, vertical: 2.0),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.22),
+                              borderRadius: BorderRadius.circular(6.0),
+                            ),
+                            child: Text(
+                              'توثيق الحساب',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11.0,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
             ),
@@ -886,7 +1133,7 @@ class _DriverVehicleVerificationScreenState
             width: double.infinity,
             height: 44.0,
             child: OutlinedButton(
-              onPressed: widget.onSkip ?? () => Navigator.maybePop(context),
+              onPressed: _handleSkip,
               style: OutlinedButton.styleFrom(
                 side: BorderSide(
                   color: isDark ? Colors.white.withValues(alpha: 0.15) : const Color(0xFFE2E8F0),

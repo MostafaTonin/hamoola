@@ -1,11 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'app.dart';
+import 'core/storage/app_preferences.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Set default system overlay style
+  // 1. Lock orientation strictly to portrait across the entire application
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]);
+
+  // 2. Set default system overlay style
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -13,5 +20,9 @@ void main() async {
     ),
   );
 
+  // 3. Initialize persistent storage & restore existing session
+  await AppPreferences.instance.init();
+
   runApp(const HamulaApp());
 }
+

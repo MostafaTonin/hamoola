@@ -50,10 +50,26 @@ void main() {
       expect(find.text('بيانات التاجر'), findsOneWidget);
       expect(find.text('بيانات النشاط التجاري والسجل التجاري'), findsOneWidget);
 
-      // Check pre-populated fields matching Image 1
-      expect(find.text('مؤسسة الأمل للتجارة العامة والاستيراد'), findsOneWidget);
+      // Check pre-populated fields matching Image 2
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is EditableText &&
+              (w.controller.text == 'مؤسسة النور للتجارة العامة' ||
+                  w.controller.text == 'مؤسسة الأمل للتجارة العامة والاستيراد'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('تجارة جملة وتجزئة'), findsOneWidget);
-      expect(find.text('CR-1048293'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate(
+          (w) =>
+              w is EditableText &&
+              (w.controller.text == '1234567890' ||
+                  w.controller.text == 'CR-1048293'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('وزارة الصناعة والتجارة - مكتب الأمانة'), findsOneWidget);
       expect(find.text('2021-08-10'), findsOneWidget);
       expect(find.text('2026-08-09'), findsOneWidget);

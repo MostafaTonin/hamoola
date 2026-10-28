@@ -2,11 +2,16 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/responsive/breakpoints.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/models/merchant_order.dart';
+import '../../domain/models/merchant_simulation_store.dart';
 import '../../domain/models/tracking_models.dart';
+import '../../domain/models/wallet_models.dart';
 
 /// Waypoint along the realistic Yemeni transport corridor (Sana'a to Aden)
 class WaypointRoutePoint {
@@ -36,6 +41,7 @@ class MerchantTripTrackingScreen extends StatefulWidget {
   final ValueChanged<String>? onCallDriver;
   final VoidCallback? onEmergencyCall;
   final LiveTripTrackingData tripData;
+  final String? orderId;
 
   const MerchantTripTrackingScreen({
     super.key,
@@ -43,6 +49,7 @@ class MerchantTripTrackingScreen extends StatefulWidget {
     this.onCallDriver,
     this.onEmergencyCall,
     this.tripData = LiveTripTrackingData.demoTrip,
+    this.orderId,
   });
 
   @override
@@ -154,9 +161,19 @@ class _MerchantTripTrackingScreenState
   @override
   void initState() {
     super.initState();
-    _currentStage = widget.tripData.currentStage;
-    _progressPercent = widget.tripData.progressPercent;
-    _statusText = widget.tripData.currentStatusText;
+    final store = MerchantSimulationStore.instance;
+    final order = widget.orderId != null ? store.getOrderById(widget.orderId!) : null;
+    if (order != null && order.isPaid) {
+      final step = store.getTripStage(order.id);
+      final execStage = TripExecutionStage.fromStepNumber(step);
+      _currentStage = execStage.toLegacyStage;
+      _statusText = execStage.title;
+      _progressPercent = ((step - 1) / 8.0).clamp(0.05, 1.0);
+    } else {
+      _currentStage = widget.tripData.currentStage;
+      _progressPercent = widget.tripData.progressPercent;
+      _statusText = widget.tripData.currentStatusText;
+    }
     _updateTelemetryFromProgress(_progressPercent);
   }
 
@@ -294,58 +311,259 @@ class _MerchantTripTrackingScreenState
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final store = MerchantSimulationStore.instance;
 
+    return ListenableBuilder(
+      listenable: store,
+      builder: (context, _) {
+        final order = widget.orderId != null ? store.getOrderById(widget.orderId!) : null;
+
+        // Unpaid trip tracking barrier (Prompt 09: لا تبدأ الرحلة قبل نجاح الدفع)
+        if (order != null && !order.isPaid) {
+          return _buildUnpaidBarrier(context, order, isDark);
+        }
+
+        // Synchronize stage if order is paid and simulation is not actively running
+        if (order != null && order.isPaid && !_isSimulating) {
+          final step = store.getTripStage(order.id);
+          final execStage = TripExecutionStage.fromStepNumber(step);
+          _currentStage = execStage.toLegacyStage;
+          _statusText = execStage.title;
+          _progressPercent = ((step - 1) / 8.0).clamp(0.05, 1.0);
+          _updateTelemetryFromProgress(_progressPercent);
+        }
+
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Scaffold(
+            backgroundColor:
+                isDark ? AppColors.navyDark : AppColors.backgroundLight,
+            body: SafeArea(
+              bottom: false,
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(
+                    maxWidth: AppBreakpoints.compactMax,
+                  ),
+                  child: Stack(
+                    children: [
+                      // 1. Live Interactive Route Map Canvas with Simulation
+                      Positioned.fill(
+                        child: _buildRouteMapCanvas(isDark),
+                      ),
+
+                      // 2. Floating Top Header
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: _buildHeader(isDark, order),
+                      ),
+
+                      // 3. Floating Live Simulation Telemetry HUD Card
+                      Positioned(
+                        top: 66,
+                        left: 0,
+                        right: 0,
+                        child: _buildLiveTelemetryHUD(isDark),
+                      ),
+
+                      // 4. Disclaimer Banner (Simulation Disclaimer)
+                      Positioned(
+                        top: 156,
+                        left: 14,
+                        right: 14,
+                        child: _buildSimulationDisclaimerBanner(isDark),
+                      ),
+
+                      // 5. Left Floating Map Controls
+                      Positioned(
+                        left: 16,
+                        bottom: _isSheetExpanded ? 600 : 230,
+                        child: _buildFloatingControls(isDark),
+                      ),
+
+                      // 6. Interactive Bottom Sheet
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: _buildTrackingBottomSheet(isDark, order, store),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSimulationDisclaimerBanner(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: (isDark ? const Color(0xDD0F172A) : const Color(0xEEFFFFFF)),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: AppColors.primaryGold.withValues(alpha: 0.5),
+          width: 1,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline_rounded,
+              color: AppColors.primaryGold, size: 15),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              'نموذج محاكاة تفاعلي: التتبع وتحديث المراحل يعمل ببيانات وهمية؛ لا يوجد تتبع GPS حقيقي أو تحويلات بنكية فعلية في هذا النموذج الأولي.',
+              style: GoogleFonts.cairo(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildUnpaidBarrier(
+      BuildContext context, MerchantOrder order, bool isDark) {
+    final fare = order.agreedFare ?? order.expectedPrice ?? order.maxBudget ?? 350000.0;
     return Directionality(
       textDirection: TextDirection.rtl,
       child: Scaffold(
         backgroundColor:
             isDark ? AppColors.navyDark : AppColors.backgroundLight,
-        body: SafeArea(
-          bottom: false,
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: AppBreakpoints.compactMax,
-              ),
-              child: Stack(
-                children: [
-                  // 1. Live Interactive Route Map Canvas with Simulation
-                  Positioned.fill(
-                    child: _buildRouteMapCanvas(isDark),
+        appBar: AppBar(
+          backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_forward_ios_rounded),
+            onPressed: () {
+              if (widget.onBack != null) {
+                widget.onBack!();
+              } else {
+                Navigator.of(context).maybePop();
+              }
+            },
+          ),
+          title: Text(
+            'حالة الرحلة — ${order.id}',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.w800, fontSize: 16),
+          ),
+          centerTitle: true,
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  width: 90,
+                  height: 90,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryGold.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
                   ),
-
-                  // 2. Floating Top Header
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: _buildHeader(isDark),
+                  child: const Icon(
+                    Icons.lock_clock_rounded,
+                    size: 48,
+                    color: AppColors.primaryGold,
                   ),
-
-                  // 3. Floating Live Simulation Telemetry HUD Card
-                  Positioned(
-                    top: 66,
-                    left: 0,
-                    right: 0,
-                    child: _buildLiveTelemetryHUD(isDark),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'الرحلة في انتظار تأكيد الاتفاق والدفع',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cairo(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? AppColors.textWhite : AppColors.textMainLight,
                   ),
-
-                  // 4. Left Floating Map Controls
-                  Positioned(
-                    left: 16,
-                    bottom: _isSheetExpanded ? 340 : 220,
-                    child: _buildFloatingControls(isDark),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'وفقاً لضوابط منصة حمولة، لا تبدأ دورة تنفيذ الرحلة ولا يُتاح التتبع المباشر أو كشف بيانات الاتصال قبل إتمام الدفع وتأكيد الأجرة النهائية من المحفظة.',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.cairo(
+                    fontSize: 13,
+                    color: isDark ? AppColors.textSubtle : AppColors.textMutedLight,
+                    height: 1.5,
                   ),
-
-                  // 5. Interactive Bottom Sheet
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _buildTrackingBottomSheet(isDark),
+                ),
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.1)
+                          : AppColors.borderLight,
+                    ),
                   ),
-                ],
-              ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'الأجرة النهائية المطلوبة:',
+                        style: GoogleFonts.cairo(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: isDark
+                              ? AppColors.textWhite
+                              : AppColors.textMainLight,
+                        ),
+                      ),
+                      Text(
+                        '${_formatAmount(fare)} ر.ي',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primaryGold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    context.push(
+                      AppRoutes.merchantAssignmentPayment,
+                      extra: {'orderId': order.id},
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGold,
+                    foregroundColor: const Color(0xFF0F172A),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  icon: const Icon(Icons.payment_rounded),
+                  label: Text(
+                    'الانتقال لشاشة تأكيد الاتفاق والدفع',
+                    style: GoogleFonts.cairo(
+                        fontWeight: FontWeight.w800, fontSize: 14),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -353,7 +571,14 @@ class _MerchantTripTrackingScreenState
     );
   }
 
-  Widget _buildHeader(bool isDark) {
+  String _formatAmount(double amount) {
+    final intVal = amount.toInt();
+    final reg = RegExp(r'\B(?=(\d{3})+(?!\d))');
+    return intVal.toString().replaceAllMapped(reg, (match) => ',');
+  }
+
+  Widget _buildHeader(bool isDark, MerchantOrder? order) {
+    final displayOrderId = order?.id ?? widget.tripData.orderId;
     return Container(
       margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -402,7 +627,7 @@ class _MerchantTripTrackingScreenState
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      '${AppStrings.tripOngoingBadge} • ${widget.tripData.orderId}',
+                      '${AppStrings.tripOngoingBadge} • $displayOrderId',
                       style: GoogleFonts.ibmPlexSansArabic(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
@@ -739,11 +964,15 @@ class _MerchantTripTrackingScreenState
     );
   }
 
-  Widget _buildTrackingBottomSheet(bool isDark) {
+  Widget _buildTrackingBottomSheet(
+    bool isDark,
+    MerchantOrder? order,
+    MerchantSimulationStore store,
+  ) {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),
       curve: Curves.easeOutCubic,
-      height: _isSheetExpanded ? 470 : 210,
+      height: _isSheetExpanded ? 580 : 210,
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -884,7 +1113,7 @@ class _MerchantTripTrackingScreenState
           ),
           const SizedBox(height: 8),
 
-          // Driver Compact Card
+          // Driver Compact Card with Direct Call & WhatsApp
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Container(
@@ -946,23 +1175,46 @@ class _MerchantTripTrackingScreenState
                       ],
                     ),
                   ),
-                  IconButton.filledTonal(
-                    onPressed: () =>
-                        widget.onCallDriver?.call(widget.tripData.driverPhone),
-                    icon: const Icon(Icons.phone_rounded, size: 18),
-                    style: IconButton.styleFrom(
-                      backgroundColor:
-                          AppColors.success.withValues(alpha: 0.15),
-                      foregroundColor: AppColors.success,
-                    ),
-                    tooltip: AppStrings.callDriver,
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton.filledTonal(
+                        onPressed: () =>
+                            widget.onCallDriver?.call(widget.tripData.driverPhone),
+                        icon: const Icon(Icons.phone_rounded, size: 18),
+                        style: IconButton.styleFrom(
+                          backgroundColor:
+                              AppColors.success.withValues(alpha: 0.15),
+                          foregroundColor: AppColors.success,
+                        ),
+                        tooltip: AppStrings.callDriver,
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton.filledTonal(
+                        onPressed: () {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('فتح محادثة واتساب مع السائق (${widget.tripData.driverPhone})'),
+                              duration: const Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.chat_bubble_rounded, size: 18),
+                        style: IconButton.styleFrom(
+                          backgroundColor:
+                              const Color(0xFF25D366).withValues(alpha: 0.15),
+                          foregroundColor: const Color(0xFF25D366),
+                        ),
+                        tooltip: 'مراسلة عبر واتساب',
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
           ),
 
-          // Expanded Content (Stepper, Milestones, Sensors)
+          // Expanded Content (9 Execution Stages, Settlement, Timeline, Sensors)
           if (_isSheetExpanded)
             Expanded(
               child: SingleChildScrollView(
@@ -971,6 +1223,16 @@ class _MerchantTripTrackingScreenState
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (order != null) ...[
+                      // 9 Sequential Execution Stages Card
+                      _buildNineStageExecutionCard(order, store, isDark),
+                      const SizedBox(height: 14),
+
+                      // Provider Settlement Breakdown Card
+                      _buildProviderSettlementCard(order, store, isDark),
+                      const SizedBox(height: 14),
+                    ],
+
                     // Simulation Stepper for Presentation
                     _buildSimulationStepper(isDark),
 
@@ -989,6 +1251,556 @@ class _MerchantTripTrackingScreenState
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildNineStageExecutionCard(
+    MerchantOrder order,
+    MerchantSimulationStore store,
+    bool isDark,
+  ) {
+    final currentStep = store.getTripStage(order.id);
+    final currentStage = TripExecutionStage.fromStepNumber(currentStep);
+    final isDone = currentStep == 9;
+    final rating = store.getOrderRating(order.id);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF131D2E) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDone
+              ? AppColors.success.withValues(alpha: 0.4)
+              : AppColors.primaryGold.withValues(alpha: 0.35),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    isDone ? Icons.check_circle_rounded : Icons.timeline_rounded,
+                    size: 18,
+                    color: isDone ? AppColors.success : AppColors.primaryGold,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'مراحل تنفيذ الرحلة (9 مراحل)',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: (isDone ? AppColors.success : AppColors.primaryGold)
+                      .withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'المرحلة $currentStep من 9',
+                  style: GoogleFonts.ibmPlexSansArabic(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: isDone ? AppColors.success : AppColors.primaryGold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: currentStep / 9.0,
+              minHeight: 6,
+              backgroundColor: isDark ? const Color(0x33FFFFFF) : const Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                isDone ? AppColors.success : AppColors.primaryGold,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryGold.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        '$currentStep',
+                        style: GoogleFonts.ibmPlexSansArabic(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primaryGold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        currentStage.title,
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Padding(
+                  padding: const EdgeInsets.only(right: 30),
+                  child: Text(
+                    currentStage.description,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: isDark ? AppColors.textSubtle : AppColors.textMutedLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          if (currentStep < 7) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  store.advanceTripStage(order.id);
+                  final next = store.getTripStageIndex(order.id);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('تم الانتقال إلى المرحلة $next: ${TripExecutionStage.fromStepNumber(next).title}'),
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.arrow_forward_rounded, size: 16),
+                label: Text(
+                  'الانتقال إلى المرحلة ${currentStep + 1}: ${TripExecutionStage.fromStepNumber(currentStep + 1).title}',
+                  style: GoogleFonts.cairo(fontSize: 11.5, fontWeight: FontWeight.w700),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primaryGold,
+                  foregroundColor: Colors.black,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ] else if (currentStep == 7) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  final ok = store.confirmDelivery(order.id);
+                  if (ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم تأكيد تسليم الحمولة بنجاح (المرحلة 8)!'),
+                        backgroundColor: AppColors.success,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.fact_check_rounded, size: 18),
+                label: Text(
+                  'تأكيد استلام الحمولة والتسليم (المرحلة 8)',
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF2563EB),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ] else if (currentStep == 8) ...[
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  final ok = store.closeTrip(order.id);
+                  if (ok) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('تم إغلاق الرحلة واعتماد التسوية المالية بنجاح!'),
+                        backgroundColor: AppColors.success,
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.lock_clock_rounded, size: 18),
+                label: Text(
+                  'إغلاق الرحلة واعتماد التسوية المالية (المرحلة 9)',
+                  style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w800),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.success,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ),
+          ] else ...[
+            if (rating != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.success.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.stars_rounded, color: AppColors.primaryGold, size: 24),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'تم تقييم الرحلة: ${rating.rating} من 5 نجوم',
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.success,
+                            ),
+                          ),
+                          if (rating.comment.isNotEmpty)
+                            Text(
+                              '"${rating.comment}"',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                color: isDark ? AppColors.textSubtle : AppColors.textMutedLight,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _showRatingDialog(context, store, order.id),
+                  icon: const Icon(Icons.star_rounded, size: 18, color: Colors.amber),
+                  label: Text(
+                    'تقييم السائق والرحلة',
+                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                    foregroundColor: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                    side: const BorderSide(color: AppColors.primaryGold),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProviderSettlementCard(
+    MerchantOrder order,
+    MerchantSimulationStore store,
+    bool isDark,
+  ) {
+    final settlement = store.getProviderSettlement(order.id);
+    final requesterPaid = settlement?.requesterPaidAmount ?? ((order.agreedFare ?? 0) + 15000);
+    final platformFee = settlement?.platformFee ?? 15000;
+    final netEarnings = settlement?.providerNetEarnings ?? (order.agreedFare ?? 0);
+    final status = settlement?.status ?? ProviderSettlementStatus.pendingCompletion;
+
+    Color statusColor = const Color(0xFFF59E0B);
+    String statusText = 'معلق لحين التسليم والإغلاق';
+    IconData statusIcon = Icons.hourglass_top_rounded;
+
+    switch (status) {
+      case ProviderSettlementStatus.pendingCompletion:
+        statusColor = const Color(0xFFF59E0B);
+        statusText = 'معلق لحين التسليم والإغلاق';
+        statusIcon = Icons.hourglass_top_rounded;
+        break;
+      case ProviderSettlementStatus.settled:
+        statusColor = AppColors.success;
+        statusText = 'تمت التسوية وإيداع الأرباح';
+        statusIcon = Icons.check_circle_rounded;
+        break;
+      case ProviderSettlementStatus.refunded:
+        statusColor = const Color(0xFF3B82F6);
+        statusText = 'مسترد';
+        statusIcon = Icons.replay_rounded;
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF131D2E) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? const Color(0x22FFFFFF) : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.account_balance_wallet_rounded,
+                      size: 18, color: AppColors.primaryGold),
+                  const SizedBox(width: 8),
+                  Text(
+                    'التسوية المالية لطلب النقل',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(statusIcon, size: 12, color: statusColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      statusText,
+                      style: GoogleFonts.cairo(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _buildSettlementRow(
+            'إجمالي مدفوعات صاحب الحمولة:',
+            '${requesterPaid.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} ر.ي',
+            isDark: isDark,
+          ),
+          const SizedBox(height: 6),
+          _buildSettlementRow(
+            'رسوم منصة حمولة:',
+            '-${platformFee.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} ر.ي',
+            isDark: isDark,
+            isSubtle: true,
+          ),
+          const Divider(height: 14),
+          _buildSettlementRow(
+            'صافي مستحقات مزود النقل (السائق):',
+            '${netEarnings.toString().replaceAllMapped(RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'), (m) => '${m[1]},')} ر.ي',
+            isDark: isDark,
+            isHighlight: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettlementRow(
+    String label,
+    String value, {
+    required bool isDark,
+    bool isSubtle = false,
+    bool isHighlight = false,
+  }) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.cairo(
+            fontSize: isHighlight ? 12 : 11,
+            fontWeight: isHighlight ? FontWeight.w800 : FontWeight.w600,
+            color: isDark ? AppColors.textSubtle : AppColors.textMutedLight,
+          ),
+        ),
+        Text(
+          value,
+          style: GoogleFonts.ibmPlexSansArabic(
+            fontSize: isHighlight ? 13 : 11.5,
+            fontWeight: isHighlight ? FontWeight.w800 : FontWeight.w600,
+            color: isHighlight
+                ? AppColors.primaryGold
+                : isSubtle
+                    ? const Color(0xFFEF4444)
+                    : (isDark ? AppColors.textWhite : AppColors.textMainLight),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showRatingDialog(
+    BuildContext context,
+    MerchantSimulationStore store,
+    String orderId,
+  ) {
+    int selectedRating = 5;
+    final commentController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final isDark = Theme.of(context).brightness == Brightness.dark;
+            return Directionality(
+              textDirection: TextDirection.rtl,
+              child: AlertDialog(
+                backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                title: Row(
+                  children: [
+                    const Icon(Icons.star_rate_rounded, color: Colors.amber, size: 24),
+                    const SizedBox(width: 8),
+                    Text(
+                      'تقييم السائق والرحلة',
+                      style: GoogleFonts.cairo(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                      ),
+                    ),
+                  ],
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'يرجى تقييم تجربة النقل ومستوى التزام السائق بتسليم الحمولة:',
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        color: isDark ? AppColors.textSubtle : AppColors.textMutedLight,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        final star = index + 1;
+                        return IconButton(
+                          onPressed: () {
+                            setDialogState(() {
+                              selectedRating = star;
+                            });
+                          },
+                          icon: Icon(
+                            star <= selectedRating
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            color: Colors.amber,
+                            size: 32,
+                          ),
+                        );
+                      }),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: commentController,
+                      maxLines: 2,
+                      decoration: InputDecoration(
+                        hintText: 'ملاحظات أو تعليق اختياري...',
+                        hintStyle: GoogleFonts.cairo(fontSize: 11),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      ),
+                      style: GoogleFonts.cairo(fontSize: 12),
+                    ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: Text('إلغاء', style: GoogleFonts.cairo()),
+                  ),
+                  ElevatedButton(
+                    onPressed: () {
+                      final success = store.submitTripRating(
+                        orderId,
+                        selectedRating.toDouble(),
+                        comment: commentController.text.trim(),
+                      );
+                      Navigator.pop(ctx);
+                      if (success) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('شكراً لك! تم تسجيل التقييم بنجاح.'),
+                            backgroundColor: AppColors.success,
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryGold,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('إرسال التقييم', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 

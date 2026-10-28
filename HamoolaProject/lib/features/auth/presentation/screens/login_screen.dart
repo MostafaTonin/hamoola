@@ -5,6 +5,9 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimensions.dart';
+import '../../domain/models/auth_simulation_store.dart';
+import '../../domain/models/auth_user.dart';
+import '../widgets/demo_accounts_sheet.dart';
 
 /// Screen 09 in Prototype: "تسجيل الدخول" (Login Screen).
 /// Directly matches the user screenshot:
@@ -49,9 +52,11 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
 
   String _selectedRole = 'عميل';
+  String _countryCode = '+967';
   bool _isPasswordObscured = true;
   bool _isOfflineLogin = false;
   bool _isLoading = false;
+  String? _errorMessage;
 
   final List<Map<String, dynamic>> _roles = [
     {'id': 'عميل', 'label': 'عميل', 'icon': Icons.person_outline_rounded},
@@ -61,6 +66,31 @@ class _LoginScreenState extends State<LoginScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _applyRoleDemoDefaults('عميل', force: true);
+  }
+
+  void _applyRoleDemoDefaults(String role, {bool force = false}) {
+    _selectedRole = role;
+    _countryCode = '+967';
+    _errorMessage = null;
+    if (role == 'عميل') {
+      _phoneController.text = '777123456';
+      _passwordController.text = 'Hamula@123';
+    } else if (role == 'تاجر') {
+      _phoneController.text = '771234567';
+      _passwordController.text = 'Hamula@123';
+    } else if (role == 'سائق') {
+      _phoneController.text = '772345678';
+      _passwordController.text = 'Hamula@123';
+    } else if (role == 'مكتب نقل') {
+      _phoneController.text = '774567890';
+      _passwordController.text = 'Hamula@123';
+    }
+  }
+
+  @override
   void dispose() {
     _phoneController.dispose();
     _passwordController.dispose();
@@ -68,14 +98,53 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() {
+    if (_isLoading) return;
+    setState(() => _errorMessage = null);
+
     if (_formKey.currentState?.validate() ?? false) {
       setState(() => _isLoading = true);
 
       Future.delayed(const Duration(milliseconds: 100), () {
         if (!mounted) return;
         setState(() => _isLoading = false);
+
+        final authResult = AuthSimulationStore.instance.login(
+          role: _selectedRole,
+          phone: _phoneController.text.trim(),
+          password: _passwordController.text,
+          isOffline: _isOfflineLogin,
+        );
+
+        if (!authResult.isSuccess) {
+          setState(() {
+            _errorMessage = authResult.errorMessage;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      authResult.errorMessage ?? 'فشل تسجيل الدخول.',
+                      style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: AppColors.error,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+          return;
+        }
+
+        final resolvedRole = authResult.user?.role.label ?? _selectedRole;
         widget.onSubmitLogin?.call(
-          _selectedRole,
+          resolvedRole,
           _phoneController.text.trim(),
           _passwordController.text,
           _isOfflineLogin,
@@ -111,7 +180,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
                     // 1. Logo & Greeting Header
                     _buildLogoHeader(titleColor, descColor),
-                    const SizedBox(height: 24.0),
+                    const SizedBox(height: 12.0),
+
+                    // Quick Demo Accounts Pill
+                    _buildDemoAccountsQuickButton(isDark),
+                    const SizedBox(height: 18.0),
 
                     // 2. 4 Role Selector Cards
                     _buildRoleSelector(isDark),
@@ -132,6 +205,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     // 6. Biometric Fingerprint Button
                     _buildBiometricButton(isDark),
                     const SizedBox(height: 16.0),
+
+                    // Inline Error Message Banner
+                    if (_errorMessage != null) ...[
+                      _buildInlineErrorMessage(),
+                      const SizedBox(height: 12.0),
+                    ],
 
                     // 7. Primary Login Button
                     _buildSubmitButton(),
@@ -229,6 +308,151 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Widget _buildDemoAccountsQuickButton(bool isDark) {
+    return Center(
+      child: InkWell(
+        onTap: () {
+          DemoAccountsSheet.show(
+            context,
+            onSelectAccount: (account) {
+              setState(() {
+                _selectedRole = account.role.label;
+                _phoneController.text = account.phone;
+                _passwordController.text = account.password;
+                _errorMessage = null;
+              });
+            },
+          );
+        },
+        borderRadius: BorderRadius.circular(20.0),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 6.0),
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFFFFBEB),
+            borderRadius: BorderRadius.circular(20.0),
+            border: Border.all(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.4),
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.flash_on_rounded,
+                size: 16.0,
+                color: Color(0xFFE67E22),
+              ),
+              const SizedBox(width: 6.0),
+              Flexible(
+                child: Text(
+                  'حسابات تجريبية',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12.0,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFFE67E22),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInlineErrorMessage() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius: BorderRadius.circular(10.0),
+        border: Border.all(color: const Color(0xFFF87171)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 2.0),
+            child: Icon(
+              Icons.error_outline_rounded,
+              color: Color(0xFFDC2626),
+              size: 18.0,
+            ),
+          ),
+          const SizedBox(width: 8.0),
+          Expanded(
+            child: Text(
+              _errorMessage!,
+              style: GoogleFonts.cairo(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF991B1B),
+                height: 1.3,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showCountryPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Directionality(
+        textDirection: TextDirection.rtl,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'اختر الدولة',
+                style: GoogleFonts.cairo(
+                  fontSize: 16.0,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              ListTile(
+                leading: const Text('🇾🇪', style: TextStyle(fontSize: 22.0)),
+                title: Text(
+                  'اليمن (+967)',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+                ),
+                trailing: _countryCode == '+967'
+                    ? const Icon(Icons.check, color: Color(0xFFE67E22))
+                    : null,
+                onTap: () {
+                  setState(() => _countryCode = '+967');
+                  Navigator.pop(ctx);
+                },
+              ),
+              ListTile(
+                leading: const Text('🇸🇦', style: TextStyle(fontSize: 22.0)),
+                title: Text(
+                  'السعودية (+966)',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+                ),
+                trailing: _countryCode == '+966'
+                    ? const Icon(Icons.check, color: Color(0xFFE67E22))
+                    : null,
+                onTap: () {
+                  setState(() => _countryCode = '+966');
+                  Navigator.pop(ctx);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildRoleSelector(bool isDark) {
     return Row(
       children: _roles.map((role) {
@@ -237,7 +461,11 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
             child: InkWell(
-              onTap: () => setState(() => _selectedRole = role['id'] as String),
+              onTap: () {
+                setState(() {
+                  _applyRoleDemoDefaults(role['id'] as String, force: true);
+                });
+              },
               borderRadius: BorderRadius.circular(12.0),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 12.0),
@@ -308,38 +536,42 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Row(
             children: [
               // +967 YE Country code dropdown indicator
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
-                decoration: BoxDecoration(
-                  border: Border(
-                    left: BorderSide(
-                      color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0),
+              InkWell(
+                onTap: _showCountryPicker,
+                borderRadius: const BorderRadius.horizontal(right: Radius.circular(12.0)),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      left: BorderSide(
+                        color: isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0),
+                      ),
                     ),
                   ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B), size: 18.0),
-                    const SizedBox(width: 4.0),
-                    Text(
-                      '+967',
-                      style: GoogleFonts.cairo(
-                        fontSize: 14.0,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFE67E22),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF64748B), size: 18.0),
+                      const SizedBox(width: 4.0),
+                      Text(
+                        _countryCode,
+                        style: GoogleFonts.cairo(
+                          fontSize: 14.0,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFFE67E22),
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4.0),
-                    Text(
-                      'YE',
-                      style: GoogleFonts.cairo(
-                        fontSize: 11.0,
-                        fontWeight: FontWeight.w600,
-                        color: const Color(0xFF94A3B8),
+                      const SizedBox(width: 4.0),
+                      Text(
+                        _countryCode == '+967' ? 'YE' : 'SA',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11.0,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF94A3B8),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
 

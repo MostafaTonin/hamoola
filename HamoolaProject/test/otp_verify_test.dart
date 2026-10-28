@@ -40,8 +40,8 @@ void main() {
     expect(find.text(AppStrings.otpTitle), findsOneWidget);
     expect(find.text(AppStrings.otpSubtitle), findsOneWidget);
 
-    // Verify phone pill with edit button
-    expect(find.text('+967 770 123 456'), findsOneWidget);
+    // Verify phone pill with edit button (masked phone per Prompt 02)
+    expect(find.textContaining('***'), findsOneWidget);
     expect(find.text(AppStrings.editPhoneBtn), findsOneWidget);
 
     // Verify 6 TextField boxes
@@ -81,6 +81,6 @@ void main() {
     await tester.tap(find.text(AppStrings.verifyButton));
     await tester.pump();
 
-    expect(find.text('يرجى إدخال كامل الرمز (6 أرقام)'), findsOneWidget);
+    expect(find.text('يرجى إدخال كامل رمز التحقق (6 أرقام).'), findsOneWidget);
   });
 }

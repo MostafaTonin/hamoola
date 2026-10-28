@@ -1,38 +1,51 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/communication_launcher.dart';
 import '../../domain/models/tracking_models.dart';
 import '../widgets/driver_filter_modal.dart';
 import '../widgets/driver_search_modal.dart';
+import '../widgets/merchant_bottom_nav_bar.dart';
+import '../widgets/truck_map_marker.dart';
 
 /// Screen representing the full Drivers Map in Hamoola.
-/// Faithfully reproduces Image 2 (Regional Arabian Peninsula view)
-/// and Image 3 (Detailed Yemen Zoom view):
-/// - Default regional scope: Yemen, Saudi Arabia, Oman, UAE & neighboring areas (Image 2)
-/// - Full interactive zoom & pan with InteractiveViewer, Zoom In (+), Zoom Out (-), Recenter
-/// - Smooth transition to detailed Yemen governorates & cities when zoomed in (Image 3)
-/// - ZERO tractors/harvesters! Only verified heavy cargo transport vehicles:
-///   (Heavy Truck, Semi-Trailer, Reefer ❄️, Dyna, Tipper)
-/// - Custom heavy truck markers with status indicators (Green: Available, Orange: Busy, Grey: Offline)
-/// - Key Feature: "متاح للعودة إلى اليمن" Callout badges for trucks outside Yemen
-/// - Dynamic clustering for regional view (Sana'a 8, Aden 4, Taiz 5) which expands on zoom
-/// - Bottom Sheet with real-time counters and filter pills:
-///   Regional: 68 available drivers | السعودية 18, عمان 7, الإمارات 5, اليمن 24
-///   Yemen: 24 available drivers | صنعاء 8, عدن 5, تعز 4, الحديدة 3
+/// Faithfully reproduces Image 2 (Target/Expected Visual Reference):
+/// - Real interactive geographic map via flutter_map with CartoDB/OSM/ESRI tiles
+/// - Default scope: Arabian Peninsula (Saudi Arabia, Yemen, Oman, UAE & transit borders)
+/// - Default filter: Shows ONLY available drivers (86 drivers available now)
+/// - ZERO tractors/harvesters! Only verified heavy cargo trucks
+/// - Marker Clustering: Dense clusters grouped into dark circular badges (e.g. "6" or "8")
+/// - Truck graphics: Clean isometric/flat vector trucks with small green status dot
+/// - Key feature: "متاح للعودة إلى اليمن" Callout speech bubble on trucks in Saudi/Oman
+/// - Floating map tools (Layers, Fullscreen, Zoom In, Zoom Out, GPS Recenter)
+/// - Bottom summary sheet with dynamic counters:
+///   86 سائقاً متاحاً الآن | مركبات نقل في السعودية وعُمان واليمن
+///   السعودية 34, عمان 18, اليمن 25, الإمارات 6, + المزيد
+/// - Bottom navigation bar matching Hamoola design system
 class MerchantMapScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final ValueChanged<AvailableTruckMarker>? onViewDriverProfile;
   final ValueChanged<AvailableTruckMarker>? onDirectOrder;
+  final VoidCallback? onHome;
+  final VoidCallback? onOrders;
+  final VoidCallback? onAccount;
+  final VoidCallback? onCreateOrder;
+  final bool enableTileNetwork;
 
   const MerchantMapScreen({
     super.key,
     this.onBack,
     this.onViewDriverProfile,
     this.onDirectOrder,
+    this.onHome,
+    this.onOrders,
+    this.onAccount,
+    this.onCreateOrder,
+    this.enableTileNetwork = true,
   });
 
   @override
@@ -40,53 +53,37 @@ class MerchantMapScreen extends StatefulWidget {
 }
 
 class _MerchantMapScreenState extends State<MerchantMapScreen>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _searchController = TextEditingController();
-  final _transformationController = TransformationController();
+  final _mapController = MapController();
 
   String _selectedCategory = 'all';
-  String _selectedRegionFilter = 'all'; // 'all', 'السعودية', 'عمان', 'الإمارات', 'اليمن', 'صنعاء', etc.
-  DriverFilterCriteria _activeFilterCriteria = const DriverFilterCriteria();
+  String _selectedRegionFilter = 'all';
+  String? _selectedScope; // null by default: shows both Saudi Arabia & Yemen per Image 1
+  DriverFilterCriteria _activeFilterCriteria = const DriverFilterCriteria(
+    availabilityStatus: 'available', // Default to available drivers only!
+  );
   AvailableTruckMarker? _selectedMarker;
-  double _currentScale = 1.0;
+  double _currentZoom = 4.9;
   bool _isSatelliteMode = false;
   bool _isFullscreen = false;
+  bool _showDriversPanel = false;
 
-  static const double _zoomThresholdYemen = 1.75;
+  static const LatLng _initialCenter = LatLng(20.5, 45.0); // South Arabian Peninsula (Saudi & Yemen centered)
 
   static const List<Map<String, dynamic>> _categories = [
     {'key': 'all', 'label': 'الكل', 'icon': null},
     {'key': 'شاحنات', 'label': 'شاحنات', 'icon': Icons.local_shipping_outlined},
     {'key': 'قاطرات', 'label': 'قاطرات', 'icon': Icons.rv_hookup_rounded},
     {'key': 'دينات', 'label': 'دينات', 'icon': Icons.fire_truck_outlined},
-    {'key': 'تبريد', 'label': 'تبريد ❄️', 'icon': Icons.ac_unit_rounded},
-    {'key': 'أخرى', 'label': 'أخرى', 'icon': Icons.more_horiz_rounded},
+    {'key': 'تبريد', 'label': 'تبريد', 'icon': Icons.ac_unit_rounded},
   ];
 
   @override
-  void initState() {
-    super.initState();
-    _transformationController.addListener(_onTransformChanged);
-  }
-
-  void _onTransformChanged() {
-    final scale = _transformationController.value.getMaxScaleOnAxis();
-    if ((scale - _currentScale).abs() > 0.05) {
-      setState(() {
-        _currentScale = scale;
-      });
-    }
-  }
-
-  @override
   void dispose() {
-    _transformationController.removeListener(_onTransformChanged);
-    _transformationController.dispose();
     _searchController.dispose();
     super.dispose();
   }
-
-  bool get _isZoomedIntoYemen => _currentScale >= _zoomThresholdYemen;
 
   static String _normalize(String text) {
     return text
@@ -100,7 +97,14 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
 
   List<AvailableTruckMarker> get _filteredTrucks {
     return AvailableTruckMarker.demoTrucks.where((truck) {
-      // 1. Category Filter (combines quick chips and filter modal)
+      // 0. Scope Tab Filter (القريب منك / السعودية / اليمن)
+      if (_selectedScope == 'saudi') {
+        if (!truck.currentCountry.contains('السعودية')) return false;
+      } else if (_selectedScope == 'yemen') {
+        if (!truck.currentCountry.contains('اليمن')) return false;
+      }
+
+      // 1. Category Filter
       final activeCat = _activeFilterCriteria.vehicleCategory != 'all'
           ? _activeFilterCriteria.vehicleCategory
           : _selectedCategory;
@@ -115,7 +119,7 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
         }
       }
 
-      // 2. Availability Status Filter
+      // 2. Availability Status Filter (Default: Available Only)
       if (_activeFilterCriteria.availabilityStatus != 'all') {
         if (truck.availabilityStatus !=
             _activeFilterCriteria.availabilityStatus) {
@@ -123,97 +127,95 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
         }
       }
 
-      // 3. Governorate Filter
-      if (_activeFilterCriteria.governorate != 'all') {
-        final gov = _normalize(_activeFilterCriteria.governorate);
-        final matchGov = _normalize(truck.governorate).contains(gov) ||
-            _normalize(truck.currentCountry).contains(gov) ||
-            _normalize(truck.currentCity).contains(gov);
-        if (!matchGov) return false;
+      // 3. Governorate / Region Filter
+      if (_selectedRegionFilter != 'all') {
+        final reg = _selectedRegionFilter;
+        final matchesCountry = truck.currentCountry.contains(reg);
+        final matchesGov = truck.governorate.contains(reg);
+        final matchesCity = truck.currentCity.contains(reg);
+        if (!matchesCountry && !matchesGov && !matchesCity) {
+          return false;
+        }
       }
 
-      // 4. District / City Filter
+      if (_activeFilterCriteria.governorate != 'all') {
+        final gov = _activeFilterCriteria.governorate;
+        final inCountry = truck.currentCountry.contains(gov);
+        final inGov = truck.governorate.contains(gov);
+        if (!inCountry && !inGov) return false;
+      }
+
+      // 4. City / District Filter
       if (_activeFilterCriteria.cityOrDistrict != 'all') {
-        final dist = _normalize(_activeFilterCriteria.cityOrDistrict);
-        final matchDist = _normalize(truck.currentCity).contains(dist) ||
-            (truck.district != null &&
-                _normalize(truck.district!).contains(dist));
-        if (!matchDist) return false;
+        final dist = _activeFilterCriteria.cityOrDistrict;
+        final matchesDist = truck.district != null && truck.district!.contains(dist);
+        final matchesCity = truck.currentCity.contains(dist);
+        if (!matchesDist && !matchesCity) return false;
       }
 
       // 5. Cargo Type Filter
       if (_activeFilterCriteria.cargoType != 'all') {
-        if (!truck.supportedCargoTypes
-            .contains(_activeFilterCriteria.cargoType)) {
-          return false;
-        }
+        final reqCargo = _activeFilterCriteria.cargoType;
+        final supports = truck.supportedCargoTypes.any((c) => c.contains(reqCargo));
+        if (!supports) return false;
       }
 
-      // 6. Regional Filter (quick chips)
-      if (_selectedRegionFilter != 'all') {
-        final reg = _normalize(_selectedRegionFilter);
-        final matchesRegion =
-            _normalize(truck.currentCountry).contains(reg) ||
-            _normalize(truck.currentCity).contains(reg) ||
-            _normalize(truck.governorate).contains(reg);
-        if (!matchesRegion) return false;
-      }
+      // 6. Search Query
+      final query = _normalize(_searchController.text);
+      if (query.isNotEmpty) {
+        final nameNorm = _normalize(truck.driverName);
+        final cityNorm = _normalize(truck.currentCity);
+        final govNorm = _normalize(truck.governorate);
+        final countryNorm = _normalize(truck.currentCountry);
+        final vehNorm = _normalize(truck.vehicleType);
+        final catNorm = _normalize(truck.vehicleCategory);
+        final idNorm = _normalize(truck.driverId);
+        final distNorm = truck.district != null ? _normalize(truck.district!) : '';
 
-      // 7. Search Query (normalized)
-      final q = _normalize(_searchController.text);
-      if (q.isNotEmpty) {
-        final matchName = _normalize(truck.driverName).contains(q);
-        final matchCity = _normalize(truck.currentCity).contains(q);
-        final matchGov = _normalize(truck.governorate).contains(q);
-        final matchCountry = _normalize(truck.currentCountry).contains(q);
-        final matchDistrict =
-            truck.district != null && _normalize(truck.district!).contains(q);
-        final matchType = _normalize(truck.vehicleType).contains(q);
-        final matchId = truck.driverId.toLowerCase().contains(q);
-        final matchDest = truck.preferredReturnDestination != null &&
-            _normalize(truck.preferredReturnDestination!).contains(q);
+        final matches = nameNorm.contains(query) ||
+            cityNorm.contains(query) ||
+            govNorm.contains(query) ||
+            countryNorm.contains(query) ||
+            vehNorm.contains(query) ||
+            catNorm.contains(query) ||
+            idNorm.contains(query) ||
+            distNorm.contains(query);
 
-        if (!matchName &&
-            !matchCity &&
-            !matchGov &&
-            !matchCountry &&
-            !matchDistrict &&
-            !matchType &&
-            !matchId &&
-            !matchDest) {
-          return false;
-        }
+        if (!matches) return false;
       }
 
       return true;
     }).toList();
   }
 
-  int get _yemenDriversCount =>
-      _filteredTrucks.where((t) => t.currentCountry == 'اليمن').length;
-
-  int get _saudiDriversCount =>
-      _filteredTrucks.where((t) => t.currentCountry.contains('السعودية')).length;
-
-  int get _omanDriversCount =>
-      _filteredTrucks.where((t) => t.currentCountry.contains('عمان')).length;
-
-  int get _uaeDriversCount =>
-      _filteredTrucks.where((t) => t.currentCountry.contains('الإمارات')).length;
-
   void _zoomIn() {
-    final newScale = (_currentScale * 1.45).clamp(1.0, 4.0);
-    _animateScale(newScale);
+    final nextZoom = (_currentZoom + 1.0).clamp(3.5, 16.0);
+    _mapController.move(_mapController.camera.center, nextZoom);
+    setState(() => _currentZoom = nextZoom);
   }
 
   void _zoomOut() {
-    final newScale = (_currentScale / 1.45).clamp(1.0, 4.0);
-    _animateScale(newScale);
+    final nextZoom = (_currentZoom - 1.0).clamp(3.5, 16.0);
+    _mapController.move(_mapController.camera.center, nextZoom);
+    setState(() => _currentZoom = nextZoom);
+  }
+
+  void _resetToBothCountries() {
+    _mapController.move(_initialCenter, 4.9);
+    setState(() {
+      _currentZoom = 4.9;
+      _selectedScope = null;
+      _selectedRegionFilter = 'all';
+      _selectedMarker = null;
+    });
   }
 
   void _recenter() {
-    _animateScale(1.0, translate: Offset.zero);
+    const najran = LatLng(17.55, 44.22);
+    _mapController.move(najran, 6.8);
     setState(() {
+      _currentZoom = 6.8;
+      _selectedScope = 'nearby';
       _selectedRegionFilter = 'all';
       _selectedMarker = null;
     });
@@ -225,36 +227,107 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
     );
   }
 
-  void _focusOnYemen() {
-    _animateScale(2.2, translate: const Offset(-80, -220));
+  void _handleNearbyScope() {
+    _showNearbyLocationDialog();
+  }
+
+  void _showNearbyLocationDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.near_me_rounded, color: Color(0xFFEF4444)),
+            const SizedBox(width: 8),
+            Text(
+              'تحديد موقعك القريب',
+              style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        content: Text(
+          'يمكن للتطبيق ترتيب وعرض السائقين الأقرب إليك. اختر موقعك المرجعي أو استخدم الموقع الحالي:',
+          style: GoogleFonts.cairo(fontSize: 13, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _simulateUserLocation(const LatLng(15.3694, 44.1910), 'صنعاء، اليمن');
+            },
+            child: Text('صنعاء', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _simulateUserLocation(const LatLng(24.7136, 46.6753), 'الرياض، السعودية');
+            },
+            child: Text('الرياض', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _simulateUserLocation(const LatLng(17.55, 44.22), 'صنعاء، اليمن');
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              foregroundColor: Colors.white,
+            ),
+            child: Text('موقعي الحالي', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _simulateUserLocation(LatLng location, String label) {
+    _mapController.move(location, 7.2);
     setState(() {
-      _selectedRegionFilter = 'اليمن';
+      _currentZoom = 7.2;
+      _selectedScope = 'nearby';
+      _selectedRegionFilter = 'all';
+      _selectedMarker = null;
     });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('تم تحديد موقعك الحالي: $label'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   void _focusOnSaudi() {
-    _animateScale(1.6, translate: const Offset(-20, 10));
+    const saudiCenter = LatLng(24.5, 45.0);
+    _mapController.move(saudiCenter, 5.8);
     setState(() {
+      _currentZoom = 5.8;
+      _selectedScope = 'saudi';
       _selectedRegionFilter = 'السعودية';
+      _selectedMarker = null;
+    });
+  }
+
+  void _focusOnYemen() {
+    const yemenCenter = LatLng(15.5, 47.5);
+    _mapController.move(yemenCenter, 6.8);
+    setState(() {
+      _currentZoom = 6.8;
+      _selectedScope = 'yemen';
+      _selectedRegionFilter = 'اليمن';
+      _selectedMarker = null;
     });
   }
 
   void _focusOnOman() {
-    _animateScale(1.8, translate: const Offset(-180, -100));
+    const omanCenter = LatLng(21.5, 57.0);
+    _mapController.move(omanCenter, 6.2);
     setState(() {
+      _currentZoom = 6.2;
+      _selectedScope = null;
       _selectedRegionFilter = 'عمان';
+      _selectedMarker = null;
     });
-  }
-
-  void _animateScale(double targetScale, {Offset? translate}) {
-    final tx = translate?.dx ?? 0.0;
-    final ty = translate?.dy ?? 0.0;
-    final matrix = Matrix4.identity();
-    matrix.storage[0] = targetScale;
-    matrix.storage[5] = targetScale;
-    matrix.storage[12] = tx;
-    matrix.storage[13] = ty;
-    _transformationController.value = matrix;
   }
 
   @override
@@ -275,32 +348,35 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
               ),
               child: Column(
                 children: [
-                  // 1. Header (خريطة السائقين • 68 سائقاً متاحاً الآن)
+                  // 1. Header (خريطة السائقين • السائقين المتاحين بالقرب منك)
                   if (!_isFullscreen) _buildHeader(isDark),
 
-                  // 2. Search Field
+                  // 2. Search Row with Filter Trigger Button
                   if (!_isFullscreen) _buildSearchRow(isDark),
 
-                  // 3. Category Filter Chips (الكل، شاحنات، قاطرات، دينات، تبريد ❄️، أخرى)
+                  // 3. Region Scope Pills (القريب منك • السعودية • اليمن)
+                  if (!_isFullscreen) _buildScopePillsRow(isDark),
+
+                  // 4. Category Filter Chips (الكل، شاحنات، قاطرات، دينات، تبريد ❄️، أخرى)
                   if (!_isFullscreen) _buildCategoryChipsBar(isDark),
 
-                  // 4. Map Viewport & Interactive Layer
+                  // 5. Map Viewport & Interactive Layer
                   Expanded(
                     child: Stack(
                       children: [
-                        // Interactive Map Surface
+                        // FlutterMap Interactive Canvas
                         Positioned.fill(
-                          child: _buildInteractiveMap(isDark),
+                          child: _buildFlutterMap(isDark),
                         ),
 
-                        // Map Control Floating Buttons (Right/Left)
+                        // Map Tools Floating Column (Layers, Fullscreen, +, -, GPS) on the LEFT
                         Positioned(
-                          right: 14,
+                          left: 14,
                           top: 14,
                           child: _buildMapToolsFloatingColumn(isDark),
                         ),
 
-                        // Empty State Floating Banner when no trucks match
+                        // Empty State Banner if 0 trucks match
                         if (_filteredTrucks.isEmpty)
                           Positioned(
                             top: 16,
@@ -309,25 +385,46 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
                             child: _buildNoResultsBanner(isDark),
                           ),
 
-                        // Scale Indicator & Attribution (Bottom Right)
+                        // Scale Indicator (0 100 200 300 كم) matching Image 1 on the RIGHT
                         Positioned(
-                          right: 16,
-                          bottom: _selectedMarker != null ? 220 : 130,
-                          child: _buildMapScaleAndAttribution(isDark),
+                          right: 14,
+                          bottom: _selectedMarker != null
+                              ? 210
+                              : (_showDriversPanel ? 305 : 18),
+                          child: _buildMapScaleIndicator(isDark),
                         ),
 
-                        // Bottom Overlay / Summary Sheet
+                        // Bottom Overlay: Selected Driver Card or Draggable Drivers Panel if opened
                         Positioned(
                           left: 0,
                           right: 0,
                           bottom: 0,
                           child: _selectedMarker != null
                               ? _buildSelectedDriverCard(_selectedMarker!, isDark)
-                              : _buildBottomStatsSheet(isDark),
+                              : (_showDriversPanel
+                                  ? _buildDraggableDriversPanel(isDark)
+                                  : const SizedBox.shrink()),
                         ),
                       ],
                     ),
                   ),
+
+                  // 5. Bottom Navigation Bar matching Image 2
+                  if (!_isFullscreen)
+                    MerchantBottomNavBar(
+                      currentTab: MerchantNavTab.map,
+                      showMapTab: true,
+                      onTabSelected: (tab) {
+                        if (tab == MerchantNavTab.home) {
+                          widget.onHome?.call();
+                        } else if (tab == MerchantNavTab.orders) {
+                          widget.onOrders?.call();
+                        } else if (tab == MerchantNavTab.account) {
+                          widget.onAccount?.call();
+                        }
+                      },
+                      onFabPressed: () => widget.onCreateOrder?.call(),
+                    ),
                 ],
               ),
             ),
@@ -338,10 +435,8 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
   }
 
   Widget _buildHeader(bool isDark) {
-    final totalAvailable = _filteredTrucks.where((t) => t.isAvailable).length;
-
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isDark ? AppColors.navyDark : Colors.white,
         border: Border(
@@ -354,49 +449,171 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
       ),
       child: Row(
         children: [
-          IconButton(
-            icon: const Icon(Icons.arrow_forward_ios_rounded, size: 18),
-            color: isDark ? AppColors.textWhite : AppColors.textMainLight,
-            onPressed: widget.onBack,
-            tooltip: AppStrings.back,
-          ),
-          const SizedBox(width: 4),
+          // 1. Back button styled as a squircle container matching reference image
           Container(
-            padding: const EdgeInsets.all(7),
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
-              color: const Color(0x1F2563EB),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Icon(Icons.map_outlined,
-                size: 20, color: Color(0xFF2563EB)),
+            child: IconButton(
+              icon: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+              color: isDark ? AppColors.textWhite : const Color(0xFF334155),
+              onPressed: widget.onBack,
+              tooltip: AppStrings.back,
+              padding: EdgeInsets.zero,
+            ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
+
+          // 2. Title & Subtitle matching reference image
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'خريطة السائقين',
+                  AppStrings.merchantMapTitle,
                   style: GoogleFonts.cairo(
                     fontSize: 16.5,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                    color: isDark ? AppColors.textWhite : const Color(0xFF0F172A),
                   ),
                 ),
                 Text(
-                  _isZoomedIntoYemen
-                      ? '$_yemenDriversCount سائقاً متاحاً الآن'
-                      : '$totalAvailable سائقاً متاحاً الآن',
+                  AppStrings.merchantMapSubtitle,
                   style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 11.5,
+                    color: isDark ? AppColors.textSubtle : const Color(0xFF64748B),
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// 3 Prominent Scope Pills matching target reference map:
+  /// [القريب منك] • [السعودية] • [اليمن]
+  Widget _buildScopePillsRow(bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(14, 2, 14, 6),
+      child: Row(
+        children: [
+          // 1. القريب منك (Red border & background tint when selected)
+          Expanded(
+            child: _buildScopePill(
+              title: 'القريب منك',
+              icon: Icons.near_me_outlined,
+              isSelected: _selectedScope == 'nearby',
+              isDark: isDark,
+              onTap: () {
+                if (_selectedScope == 'nearby') {
+                  _resetToBothCountries();
+                } else {
+                  _handleNearbyScope();
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // 2. السعودية
+          Expanded(
+            child: _buildScopePill(
+              title: 'السعودية',
+              icon: Icons.map_outlined,
+              isSelected: _selectedScope == 'saudi',
+              isDark: isDark,
+              onTap: () {
+                if (_selectedScope == 'saudi') {
+                  _resetToBothCountries();
+                } else {
+                  _focusOnSaudi();
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+
+          // 3. اليمن
+          Expanded(
+            child: _buildScopePill(
+              title: 'اليمن',
+              icon: Icons.map_outlined,
+              isSelected: _selectedScope == 'yemen',
+              isDark: isDark,
+              onTap: () {
+                if (_selectedScope == 'yemen') {
+                  _resetToBothCountries();
+                } else {
+                  _focusOnYemen();
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScopePill({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    final activeColor = const Color(0xFFEF4444); // Red/Coral matching reference
+    final borderColor = isSelected
+        ? activeColor
+        : (isDark ? Colors.white.withValues(alpha: 0.1) : const Color(0xFFE2E8F0));
+    final bgColor = isSelected
+        ? (isDark ? const Color(0x2EEF4444) : const Color(0xFFFEF2F2))
+        : (isDark ? const Color(0xFF1E293B) : Colors.white);
+    final textColor = isSelected
+        ? activeColor
+        : (isDark ? Colors.white : const Color(0xFF334155));
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        height: 38,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: borderColor,
+            width: isSelected ? 1.5 : 1.0,
+          ),
+          boxShadow: [
+            if (!isSelected)
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.03),
+                blurRadius: 4,
+                offset: const Offset(0, 1),
+              ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: textColor),
+            const SizedBox(width: 6),
+            Text(
+              title,
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -408,7 +625,67 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
       padding: const EdgeInsets.fromLTRB(14, 8, 14, 6),
       child: Row(
         children: [
-          // 1. Filter Trigger Button (Image 1)
+          // Search Field Button (Right side in RTL)
+          Expanded(
+            child: InkWell(
+              onTap: () => _openSearchModal(context),
+              borderRadius: BorderRadius.circular(12),
+              child: Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF1E293B) : Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.08)
+                        : AppColors.borderLight,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.search_rounded,
+                        size: 20, color: Color(0xFF94A3B8)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _searchController.text.isEmpty
+                            ? AppStrings.searchDriversHint
+                            : _searchController.text,
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: _searchController.text.isEmpty
+                              ? const Color(0xFF94A3B8)
+                              : (isDark
+                                  ? AppColors.textWhite
+                                  : AppColors.textMainLight),
+                          fontWeight: _searchController.text.isEmpty
+                              ? FontWeight.w500
+                              : FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (_searchController.text.isNotEmpty)
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _searchController.clear();
+                          });
+                        },
+                        child: const Icon(Icons.close_rounded,
+                            size: 18, color: Color(0xFF94A3B8)),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(width: 8),
+
+          // Filter Trigger Button (Left side in RTL)
           Tooltip(
             message: 'تصفية السائقين',
             child: InkWell(
@@ -461,52 +738,6 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
               ),
             ),
           ),
-          const SizedBox(width: 8),
-
-          // 2. Search Text Field & Dedicated Modal Trigger (Image 2)
-          Expanded(
-            child: TextField(
-              controller: _searchController,
-              onTap: () => _openSearchModal(context),
-              onChanged: (_) => setState(() {}),
-              style: GoogleFonts.cairo(
-                fontSize: 13,
-                color: isDark ? AppColors.textWhite : AppColors.textMainLight,
-              ),
-              decoration: InputDecoration(
-                hintText: AppStrings.searchDriversHint,
-                hintStyle: GoogleFonts.cairo(
-                  fontSize: 12.5,
-                  color: const Color(0xFF94A3B8),
-                ),
-                prefixIcon: IconButton(
-                  icon: const Icon(Icons.search_rounded,
-                      size: 20, color: Color(0xFF64748B)),
-                  onPressed: () => _openSearchModal(context),
-                ),
-                suffixIcon: _searchController.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded, size: 18),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : AppColors.borderLight,
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -522,16 +753,6 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
           if (newCriteria.vehicleCategory != 'all') {
             _selectedCategory = newCriteria.vehicleCategory;
           }
-          if (newCriteria.governorate != 'all') {
-            _selectedRegionFilter = newCriteria.governorate;
-          }
-        });
-      },
-      onReset: () {
-        setState(() {
-          _activeFilterCriteria = const DriverFilterCriteria();
-          _selectedCategory = 'all';
-          _selectedRegionFilter = 'all';
         });
       },
     );
@@ -541,27 +762,14 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
     DriverSearchModal.show(
       context,
       allTrucks: AvailableTruckMarker.demoTrucks,
-      allLocations: LocationSearchResult.demoLocations,
-      currentFilter: _activeFilterCriteria,
       initialQuery: _searchController.text,
+      currentFilter: _activeFilterCriteria,
       onSelectDriver: (driver) {
         setState(() {
           _selectedMarker = driver;
           _searchController.text = driver.driverName;
         });
-        if (driver.currentCountry == 'اليمن' && driver.xRatioYemen != null) {
-          _animateScale(2.6,
-              translate: Offset(
-                -(driver.xRatioYemen! * 500 - 150),
-                -(driver.yRatioYemen! * 700 - 250),
-              ));
-        } else {
-          _animateScale(1.8,
-              translate: Offset(
-                -(driver.xRatio * 500 - 150),
-                -(driver.yRatio * 700 - 250),
-              ));
-        }
+        _mapController.move(LatLng(driver.latitude, driver.longitude), 12.5);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -575,19 +783,7 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
           _searchController.text = location.name;
           _selectedRegionFilter = location.governorate;
         });
-        if (location.country == 'اليمن' && location.xRatioYemen != null) {
-          _animateScale(2.5,
-              translate: Offset(
-                -(location.xRatioYemen! * 500 - 150),
-                -(location.yRatioYemen! * 700 - 250),
-              ));
-        } else {
-          _animateScale(1.8,
-              translate: Offset(
-                -(location.xRatio * 500 - 150),
-                -(location.yRatio * 700 - 250),
-              ));
-        }
+        _mapController.move(LatLng(location.latitude, location.longitude), 11.5);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -619,67 +815,6 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
           _focusOnYemen();
         }
       },
-    );
-  }
-
-  Widget _buildNoResultsBanner(bool isDark) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.filter_alt_off_rounded,
-              size: 20, color: Color(0xFFF59E0B)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              'لا توجد مركبات مطابقة لمعايير البحث والتصفية المحددة',
-              style: GoogleFonts.cairo(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w700,
-                color: isDark ? AppColors.textWhite : const Color(0xFF1E293B),
-              ),
-            ),
-          ),
-          const SizedBox(width: 6),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _activeFilterCriteria = const DriverFilterCriteria();
-                _selectedCategory = 'all';
-                _selectedRegionFilter = 'all';
-                _searchController.clear();
-              });
-            },
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              'إعادة تعيين',
-              style: GoogleFonts.cairo(
-                fontSize: 11,
-                fontWeight: FontWeight.w800,
-                color: const Color(0xFF2563EB),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 
@@ -726,9 +861,7 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
                   ? Colors.white
                   : (isDark ? AppColors.textWhite : const Color(0xFF334155)),
             ),
-            backgroundColor: isDark
-                ? const Color(0xFF1E293B)
-                : Colors.white,
+            backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
             side: BorderSide(
               color: isSelected
                   ? const Color(0xFF0F172A)
@@ -745,666 +878,475 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
     );
   }
 
-  Widget _buildInteractiveMap(bool isDark) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final w = constraints.maxWidth;
-        final h = constraints.maxHeight;
+  Widget _buildFlutterMap(bool isDark) {
+    final trucks = _filteredTrucks;
+    final markers = <Marker>[];
 
-        return InteractiveViewer(
-          transformationController: _transformationController,
-          minScale: 1.0,
-          maxScale: 4.0,
-          boundaryMargin: const EdgeInsets.all(80),
-          child: SizedBox(
-            width: w,
-            height: h,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 1. Stylized Background Cartography
-                Positioned.fill(
-                  child: CustomPaint(
-                    painter: _RegionalMapPainter(
-                      isDark: isDark,
-                      isSatellite: _isSatelliteMode,
-                      isZoomedYemen: _isZoomedIntoYemen,
-                    ),
-                  ),
-                ),
-
-                // 2. Geographic Labels (Yemen, Saudi Arabia, Oman, UAE & Water Bodies)
-                ..._buildGeographicLabels(w, h, isDark),
-
-                // 3. Cluster Badges when in Regional Scope (Sana'a 8, Aden 4, Taiz 5)
-                if (!_isZoomedIntoYemen) ...[
-                  _buildClusterBadge(
-                    label: '8',
-                    cityName: 'صنعاء',
-                    x: w * 0.40,
-                    y: h * 0.69,
-                    onTap: _focusOnYemen,
-                  ),
-                  _buildClusterBadge(
-                    label: '4',
-                    cityName: 'عدن',
-                    x: w * 0.47,
-                    y: h * 0.81,
-                    onTap: _focusOnYemen,
-                  ),
-                  _buildClusterBadge(
-                    label: '5',
-                    cityName: 'تعز',
-                    x: w * 0.36,
-                    y: h * 0.77,
-                    onTap: _focusOnYemen,
-                  ),
-                ],
-
-                // 4. Truck Markers
-                ..._filteredTrucks.where((truck) {
-                  // In regional mode, hide the trucks represented by clusters in Yemen center
-                  if (!_isZoomedIntoYemen && truck.currentCountry == 'اليمن') {
-                    if (truck.currentCity == 'صنعاء' && truck.id != 'TRK-YE-01') {
-                      return false;
-                    }
-                    if (truck.currentCity == 'عدن' && truck.id != 'TRK-YE-09') {
-                      return false;
-                    }
-                    if (truck.currentCity == 'تعز' && truck.id != 'TRK-YE-14') {
-                      return false;
-                    }
-                  }
-                  return true;
-                }).map((truck) {
-                  final double x;
-                  final double y;
-                  if (_isZoomedIntoYemen && truck.xRatioYemen != null) {
-                    x = truck.xRatioYemen! * w;
-                    y = truck.yRatioYemen! * h;
-                  } else {
-                    x = truck.xRatio * w;
-                    y = truck.yRatio * h;
-                  }
-
-                  final isSelected = _selectedMarker?.id == truck.id;
-
-                  return Positioned(
-                    left: x - 24,
-                    top: y - 24,
-                    child: _buildTruckMarkerItem(truck, isSelected),
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  List<Widget> _buildGeographicLabels(double w, double h, bool isDark) {
-    if (_isZoomedIntoYemen) {
-      // Zoomed Yemen Labels (Image 3)
-      return [
-        _buildCityLabel('صنعاء', w * 0.38, h * 0.28, isDark, isMajor: true),
-        _buildCityLabel('عمران', w * 0.34, h * 0.22, isDark),
-        _buildCityLabel('صعدة', w * 0.28, h * 0.12, isDark),
-        _buildCityLabel('حجة', w * 0.24, h * 0.20, isDark),
-        _buildCityLabel('الجوف', w * 0.52, h * 0.14, isDark),
-        _buildCityLabel('مأرب', w * 0.64, h * 0.24, isDark),
-        _buildCityLabel('الحديدة', w * 0.18, h * 0.38, isDark, isMajor: true),
-        _buildCityLabel('ذمار', w * 0.40, h * 0.44, isDark),
-        _buildCityLabel('إب', w * 0.38, h * 0.54, isDark),
-        _buildCityLabel('البيضاء', w * 0.54, h * 0.48, isDark),
-        _buildCityLabel('تعز', w * 0.33, h * 0.64, isDark, isMajor: true),
-        _buildCityLabel('لحج', w * 0.40, h * 0.72, isDark),
-        _buildCityLabel('أبين', w * 0.58, h * 0.66, isDark),
-        _buildCityLabel('عدن', w * 0.48, h * 0.78, isDark, isMajor: true),
-        _buildCityLabel('شبوة', w * 0.68, h * 0.52, isDark),
-        _buildCityLabel('حضرموت', w * 0.82, h * 0.48, isDark),
-        _buildCityLabel('المهرة', w * 0.90, h * 0.26, isDark),
-        _buildCityLabel('سقطرى', w * 0.85, h * 0.84, isDark),
-        _buildSeaLabel('البحر الأحمر', w * 0.12, h * 0.56),
-        _buildSeaLabel('خليج عدن', w * 0.60, h * 0.86),
-      ];
-    } else {
-      // Regional Arabian Peninsula Labels (Image 2)
-      return [
-        _buildCountryLabel('المملكة العربية السعودية', w * 0.46, h * 0.30),
-        _buildCountryLabel('اليمن', w * 0.44, h * 0.72),
-        _buildCountryLabel('عمان', w * 0.78, h * 0.58),
-        _buildCountryLabel('الإمارات العربية المتحدة', w * 0.70, h * 0.34),
-        _buildCountryLabel('الكويت', w * 0.56, h * 0.16),
-        _buildCountryLabel('قطر', w * 0.64, h * 0.32),
-        _buildCountryLabel('الأردن', w * 0.22, h * 0.18),
-        _buildCountryLabel('العراق', w * 0.36, h * 0.12),
-        _buildCountryLabel('مصر', w * 0.14, h * 0.32),
-        _buildCountryLabel('السودان', w * 0.16, h * 0.52),
-        _buildCountryLabel('إريتريا', w * 0.22, h * 0.68),
-        _buildCountryLabel('جيبوتي', w * 0.32, h * 0.82),
-        _buildCountryLabel('الصومال', w * 0.44, h * 0.92),
-        _buildCityLabel('الرياض', w * 0.50, h * 0.34, isDark),
-        _buildCityLabel('جدة', w * 0.28, h * 0.44, isDark),
-        _buildCityLabel('الدمام', w * 0.62, h * 0.30, isDark),
-        _buildCityLabel('أبوظبي', w * 0.68, h * 0.38, isDark),
-        _buildCityLabel('مسقط', w * 0.80, h * 0.44, isDark),
-        _buildCityLabel('صلالة', w * 0.70, h * 0.66, isDark),
-        _buildSeaLabel('البحر الأحمر', w * 0.24, h * 0.54),
-        _buildSeaLabel('الخليج العربي', w * 0.62, h * 0.26),
-        _buildSeaLabel('بحر العرب', w * 0.80, h * 0.76),
-      ];
-    }
-  }
-
-  Widget _buildCountryLabel(String text, double x, double y) {
-    return Positioned(
-      left: x,
-      top: y,
-      child: Text(
-        text,
-        style: GoogleFonts.cairo(
-          fontSize: 12,
-          fontWeight: FontWeight.w800,
-          color: const Color(0xFF1E293B),
-          shadows: const [
-            Shadow(color: Colors.white, blurRadius: 4),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCityLabel(String name, double x, double y, bool isDark,
-      {bool isMajor = false}) {
-    return Positioned(
-      left: x,
-      top: y,
-      child: Text(
-        name,
-        style: GoogleFonts.cairo(
-          fontSize: isMajor ? 11.5 : 10,
-          fontWeight: isMajor ? FontWeight.w800 : FontWeight.w600,
-          color: isMajor
-              ? const Color(0xFF0F172A)
-              : const Color(0xFF64748B),
-          shadows: const [
-            Shadow(color: Colors.white, blurRadius: 3),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSeaLabel(String name, double x, double y) {
-    return Positioned(
-      left: x,
-      top: y,
-      child: Text(
-        name,
-        style: GoogleFonts.cairo(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: const Color(0xFF0284C7),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildClusterBadge({
-    required String label,
-    required String cityName,
-    required double x,
-    required double y,
-    required VoidCallback onTap,
-  }) {
-    return Positioned(
-      left: x - 18,
-      top: y - 18,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2563EB),
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 2.5),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF2563EB).withValues(alpha: 0.4),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: GoogleFonts.ibmPlexSansArabic(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTruckMarkerItem(AvailableTruckMarker truck, bool isSelected) {
-    return GestureDetector(
-      onTap: () => setState(() => _selectedMarker = truck),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // 1. "متاح للعودة إلى اليمن" Callout Bubble (Image 2)
-          if (truck.returnToYemenAvailable && !_isZoomedIntoYemen) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              margin: const EdgeInsets.only(bottom: 3),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(8),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                border: Border.all(color: const Color(0xFFE2E8F0)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: 6,
-                    height: 6,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF16A34A),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    'متاح للعودة\nإلى اليمن',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.cairo(
-                      fontSize: 8.5,
-                      height: 1.2,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF0F172A),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          // 2. Heavy Truck Graphic with separate status indicator dot
-          Stack(
-            clipBehavior: Clip.none,
+    // 1. Pulsing Blue GPS Location Marker (Image reference: Najran / Saudi-Yemen border)
+    markers.add(
+      Marker(
+        point: const LatLng(17.55, 44.22),
+        width: 80,
+        height: 80,
+        child: Center(
+          child: Stack(
+            alignment: Alignment.center,
             children: [
-              // Custom Heavy Truck Visual
-              _buildHeavyTruckIcon(truck, isSelected),
-
-              // Status Indicator Dot (Green = Available, Orange = Busy, Grey = Offline)
-              Positioned(
-                top: -2,
-                right: -2,
-                child: Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: truck.isAvailable
-                        ? const Color(0xFF16A34A)
-                        : (truck.isBusy ? const Color(0xFFF59E0B) : const Color(0xFF94A3B8)),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 1.8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 3,
-                      ),
-                    ],
+              Container(
+                width: 62,
+                height: 62,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF3B82F6).withValues(alpha: 0.22),
+                  border: Border.all(
+                    color: const Color(0xFF3B82F6).withValues(alpha: 0.45),
+                    width: 1.5,
                   ),
+                ),
+              ),
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF2563EB),
+                  border: Border.all(color: Colors.white, width: 3.5),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Color(0x662563EB),
+                      blurRadius: 8,
+                      spreadRadius: 2,
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
-  }
 
-  Widget _buildHeavyTruckIcon(AvailableTruckMarker truck, bool isSelected) {
-    Color truckColor;
-    if (truck.isRefrigerated) {
-      truckColor = const Color(0xFF0284C7); // Light blue for reefer
-    } else if (truck.vehicleCategory == 'قاطرات') {
-      truckColor = const Color(0xFF334155); // Slate for semi-trailers
-    } else if (truck.vehicleCategory == 'دينات') {
-      truckColor = const Color(0xFFD97706); // Amber for dyna
-    } else {
-      truckColor = const Color(0xFF15803D); // Green for heavy box truck
+    // 2. Clustering & Realistic Vector Truck Markers matching Image 1
+    final riyadhTrucks =
+        trucks.where((t) => t.currentCity.contains('الرياض')).toList();
+    final sanaaTrucks =
+        trucks.where((t) => t.currentCity.contains('صنعاء')).toList();
+
+    final isClustered = _currentZoom < 7.0;
+
+    // 2a. Riyadh Cluster
+    if (isClustered && riyadhTrucks.length > 2) {
+      markers.add(
+        Marker(
+          point: const LatLng(24.7136, 46.6753),
+          width: 44,
+          height: 44,
+          child: TruckMapMarker(
+            isCluster: true,
+            clusterCount: riyadhTrucks.length,
+            clusterCity: 'الرياض',
+            onTap: () {
+              _mapController.move(const LatLng(24.7136, 46.6753), 8.5);
+              setState(() => _currentZoom = 8.5);
+            },
+          ),
+        ),
+      );
     }
 
-    return Container(
-      width: 44,
-      height: 34,
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFFEF3C7) : Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isSelected ? AppColors.primaryGold : const Color(0xFFCBD5E1),
-          width: isSelected ? 2.2 : 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
+    // 2b. Sana'a Cluster
+    if (isClustered && sanaaTrucks.length > 2) {
+      markers.add(
+        Marker(
+          point: const LatLng(15.3694, 44.1910),
+          width: 44,
+          height: 44,
+          child: TruckMapMarker(
+            isCluster: true,
+            clusterCount: sanaaTrucks.length,
+            clusterCity: 'صنعاء',
+            onTap: () {
+              _mapController.move(const LatLng(15.3694, 44.1910), 8.5);
+              setState(() => _currentZoom = 8.5);
+            },
           ),
-        ],
-      ),
-      child: Center(
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              truck.isRefrigerated
-                  ? Icons.ac_unit_rounded
-                  : (truck.vehicleCategory == 'قاطرات'
-                      ? Icons.rv_hookup_rounded
-                      : Icons.local_shipping_rounded),
-              size: 20,
-              color: truckColor,
-            ),
-          ],
         ),
+      );
+    }
+
+    // 2c. Individual Realistic Vector Trucks with Small Green Status Dot
+    for (int i = 0; i < trucks.length; i++) {
+      final t = trucks[i];
+      final inRiyadh = t.currentCity.contains('الرياض');
+      final inSanaa = t.currentCity.contains('صنعاء');
+
+      if (isClustered &&
+          ((inRiyadh && riyadhTrucks.length > 2) ||
+              (inSanaa && sanaaTrucks.length > 2))) {
+        continue;
+      }
+
+      final latOffset = ((i % 5) - 2) * 0.035;
+      final lngOffset = (((i ~/ 5) % 5) - 2) * 0.035;
+      final lat = t.latitude + (isClustered ? 0 : latOffset);
+      final lng = t.longitude + (isClustered ? 0 : lngOffset);
+
+      final isSelected = _selectedMarker?.id == t.id;
+
+      markers.add(
+        Marker(
+          point: LatLng(lat, lng),
+          width: 52,
+          height: 40,
+          child: TruckMapMarker(
+            truck: t,
+            isSelected: isSelected,
+            isBadge: false,
+            isPhotoPin: false,
+            showCallout: t.returnToYemenAvailable &&
+                (t.currentCity == 'نجران' || t.currentCity == 'جيزان'),
+            onTap: () {
+              setState(() => _selectedMarker = t);
+            },
+          ),
+        ),
+      );
+    }
+
+    // High quality map tile URLs (OpenStreetMap: 100% Arabic geography, 0 API key, 0 watermark)
+    final tileUrl = _isSatelliteMode
+        ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}.jpg'
+        : 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+    return FlutterMap(
+      mapController: _mapController,
+      options: MapOptions(
+        initialCenter: _initialCenter,
+        initialZoom: _currentZoom,
+        minZoom: 3.5,
+        maxZoom: 18.0,
+        onPositionChanged: (camera, hasGesture) {
+          if ((camera.zoom - _currentZoom).abs() > 0.1) {
+            setState(() => _currentZoom = camera.zoom);
+          }
+        },
+        onTap: (tapPosition, point) {
+          if (_selectedMarker != null) {
+            setState(() => _selectedMarker = null);
+          }
+        },
       ),
+      children: [
+        // Real Geographic Tile Layer (OpenStreetMap / Esri Satellite)
+        if (widget.enableTileNetwork)
+          TileLayer(
+            urlTemplate: tileUrl,
+            userAgentPackageName: 'com.hamoola.app',
+            maxZoom: 18,
+            errorTileCallback: (tile, error, stackTrace) {},
+          ),
+
+        // Truck Markers Layer with Clustering
+        MarkerLayer(
+          markers: markers,
+        ),
+      ],
     );
   }
 
   Widget _buildMapToolsFloatingColumn(bool isDark) {
     return Column(
       children: [
-        // Layers Switcher
-        _buildMapToolBtn(
-          icon: Icons.layers_outlined,
-          tooltip: 'تبديل طبقات الخريطة',
+        _buildToolBtn(
+          icon: _isSatelliteMode ? Icons.map_rounded : Icons.layers_rounded,
+          tooltip: _isSatelliteMode ? 'خريطة الطرق' : 'صور الأقمار الصناعية',
+          isDark: isDark,
           onTap: () {
             setState(() => _isSatelliteMode = !_isSatelliteMode);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(_isSatelliteMode
-                    ? 'تم تفعيل طبقة الخريطة الطبوغرافية الفضائية'
-                    : 'تم تفعيل طبقة الخريطة اللوجستية القياسية'),
-                duration: const Duration(seconds: 1),
-              ),
-            );
           },
-          isDark: isDark,
         ),
         const SizedBox(height: 8),
-
-        // Fullscreen Toggle
-        _buildMapToolBtn(
+        _buildToolBtn(
           icon: _isFullscreen
               ? Icons.fullscreen_exit_rounded
               : Icons.fullscreen_rounded,
-          tooltip: 'ملء الشاشة',
-          onTap: () => setState(() => _isFullscreen = !_isFullscreen),
+          tooltip: _isFullscreen ? 'خروج من ملء الشاشة' : 'ملء الشاشة',
           isDark: isDark,
+          onTap: () {
+            setState(() => _isFullscreen = !_isFullscreen);
+          },
         ),
         const SizedBox(height: 8),
-
-        // Zoom In (+)
-        _buildMapToolBtn(
+        _buildToolBtn(
           icon: Icons.add_rounded,
           tooltip: 'تكبير',
+          isDark: isDark,
           onTap: _zoomIn,
-          isDark: isDark,
-        ),
-        const SizedBox(height: 4),
-
-        // Zoom Out (-)
-        _buildMapToolBtn(
-          icon: Icons.remove_rounded,
-          tooltip: 'تصغير',
-          onTap: _zoomOut,
-          isDark: isDark,
         ),
         const SizedBox(height: 8),
-
-        // Recenter / GPS location
-        _buildMapToolBtn(
-          icon: Icons.my_location_rounded,
-          tooltip: AppStrings.currentLocateTooltip,
-          onTap: _recenter,
-          iconColor: const Color(0xFF2563EB),
+        _buildToolBtn(
+          icon: Icons.remove_rounded,
+          tooltip: 'تصغير',
           isDark: isDark,
+          onTap: _zoomOut,
+        ),
+        const SizedBox(height: 8),
+        _buildToolBtn(
+          icon: Icons.my_location_rounded,
+          tooltip: 'موقعي الحالي',
+          isDark: isDark,
+          color: const Color(0xFF2563EB),
+          onTap: _recenter,
         ),
       ],
     );
   }
 
-  Widget _buildMapToolBtn({
+  Widget _buildToolBtn({
     required IconData icon,
     required String tooltip,
-    required VoidCallback onTap,
-    Color? iconColor,
     required bool isDark,
+    Color? color,
+    required VoidCallback onTap,
   }) {
     return Tooltip(
       message: tooltip,
-      child: InkWell(
-        onTap: onTap,
+      child: Material(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
         borderRadius: BorderRadius.circular(10),
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : const Color(0xFFE2E8F0),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.12),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+        elevation: 2,
+        shadowColor: Colors.black.withValues(alpha: 0.15),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            width: 38,
+            height: 38,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : const Color(0xFFE2E8F0),
               ),
-            ],
-          ),
-          child: Icon(
-            icon,
-            size: 19,
-            color: iconColor ?? (isDark ? Colors.white : const Color(0xFF334155)),
+            ),
+            child: Icon(
+              icon,
+              size: 20,
+              color: color ??
+                  (isDark ? Colors.white : const Color(0xFF334155)),
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildMapScaleAndAttribution(bool isDark) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.65),
-            borderRadius: BorderRadius.circular(6),
+  Widget _buildMapScaleIndicator(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: (isDark ? const Color(0xFF0F172A) : Colors.white).withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(
+          color: isDark ? Colors.white12 : Colors.black12,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('0', style: GoogleFonts.cairo(fontSize: 8.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : const Color(0xFF475569))),
+              const SizedBox(width: 14),
+              Text('100', style: GoogleFonts.cairo(fontSize: 8.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : const Color(0xFF475569))),
+              const SizedBox(width: 14),
+              Text('200', style: GoogleFonts.cairo(fontSize: 8.5, fontWeight: FontWeight.w600, color: isDark ? Colors.white70 : const Color(0xFF475569))),
+              const SizedBox(width: 14),
+              Text('300 كم', style: GoogleFonts.cairo(fontSize: 8.5, fontWeight: FontWeight.w700, color: isDark ? Colors.white : const Color(0xFF1E293B))),
+            ],
           ),
-          child: Text(
-            _isZoomedIntoYemen ? '100 كم' : '500 كم',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+          const SizedBox(height: 1),
+          SizedBox(
+            width: 110,
+            height: 5,
+            child: CustomPaint(
+              painter: _ScaleBarPainter(
+                color: isDark ? Colors.white70 : const Color(0xFF1E293B),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 6),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0055FF),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            'maptiler',
-            style: GoogleFonts.ibmPlexSansArabic(
-              fontSize: 9.5,
-              fontWeight: FontWeight.w700,
-              color: Colors.white,
-            ),
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
-  Widget _buildBottomStatsSheet(bool isDark) {
+  Widget _buildNoResultsBanner(bool isDark) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 18,
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.filter_alt_off_rounded,
+              size: 20, color: Color(0xFFF59E0B)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'لا توجد مركبات مطابقة لمعايير البحث والتصفية المحددة',
+              style: GoogleFonts.cairo(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: isDark ? AppColors.textWhite : const Color(0xFF1E293B),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _activeFilterCriteria = const DriverFilterCriteria(
+                  availabilityStatus: 'available',
+                );
+                _selectedCategory = 'all';
+                _selectedRegionFilter = 'all';
+                _selectedScope = 'nearby';
+                _searchController.clear();
+              });
+            },
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Text(
+              'إعادة تعيين',
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: const Color(0xFF2563EB),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Sliding Bottom Panel matching Target Reference Map:
+  /// - Top drag handle
+  /// - Header: "السائقين المتاحين بالقرب منك" • "12 سائق متاح"
+  /// - List of available drivers with avatar, online dot, rating, distance, "عرض التفاصيل" button
+  Widget _buildDraggableDriversPanel(bool isDark) {
+    final availableTrucks = _filteredTrucks.where((t) => t.isAvailable).toList();
+    final scopeTitle = _selectedScope == 'nearby'
+        ? 'السائقين المتاحين بالقرب منك'
+        : (_selectedScope == 'saudi'
+            ? 'السائقين المتاحين في السعودية'
+            : 'السائقين المتاحين في اليمن');
+
+    return Container(
+      height: 295,
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.4 : 0.1),
+            blurRadius: 20,
             offset: const Offset(0, -4),
           ),
         ],
       ),
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
+          // 1. Subtle Drag Handle
+          const SizedBox(height: 10),
           Container(
-            width: 36,
+            width: 38,
             height: 4,
             decoration: BoxDecoration(
-              color: const Color(0xFFCBD5E1),
+              color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(height: 10),
 
-          // Header summary row
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFDCFCE7),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.local_shipping_rounded,
-                    size: 20, color: Color(0xFF16A34A)),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          _isZoomedIntoYemen
-                              ? '$_yemenDriversCount سائقاً متاحاً الآن'
-                              : '${_filteredTrucks.where((t) => t.isAvailable).length} سائقاً متاحاً الآن',
-                          style: GoogleFonts.cairo(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w800,
-                            color: isDark
-                                ? AppColors.textWhite
-                                : AppColors.textMainLight,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF16A34A),
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ],
+          // 2. Header Row: "السائقين المتاحين بالقرب منك" • "12 سائق متاح"
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    scopeTitle,
+                    style: GoogleFonts.cairo(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
                     ),
-                    Text(
-                      _isZoomedIntoYemen
-                          ? 'مركبات قريبة منك في مختلف المحافظات'
-                          : 'مركبات في اليمن والدول المجاورة متاحة للنقل',
-                      style: GoogleFonts.cairo(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.textSubtle
-                            : const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () => _showDriversListModal(context, isDark),
-                icon: const Icon(Icons.format_list_bulleted_rounded, size: 16),
-                label: Text(
-                  'عرض القائمة',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: const Color(0xFF2563EB),
-                  side: const BorderSide(color: Color(0xFFBFDBFE)),
-                  minimumSize: const Size(0, 36),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                const SizedBox(width: 8),
+                Text(
+                  '${availableTrucks.length} سائق متاح',
+                  style: GoogleFonts.cairo(
+                    fontSize: 12.0,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => setState(() => _showDriversPanel = false),
+                  icon: const Icon(Icons.close_rounded, size: 20),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  color: isDark ? Colors.white70 : const Color(0xFF64748B),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
+          Divider(
+            height: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFF1F5F9),
+          ),
 
-          // Regional / Governorate filter chips (Image 2 & Image 3)
-          SizedBox(
-            height: 34,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: _isZoomedIntoYemen
-                  ? [
-                      _buildRegionChip('صنعاء 8', 'صنعاء', isDark),
-                      _buildRegionChip('عدن 5', 'عدن', isDark),
-                      _buildRegionChip('تعز 4', 'تعز', isDark),
-                      _buildRegionChip('الحديدة 3', 'الحديدة', isDark),
-                      _buildRegionChip('إب 2', 'إب', isDark),
-                      _buildRegionChip('+ المزيد', 'all', isDark),
-                    ]
-                  : [
-                      _buildRegionChip(
-                          'السعودية $_saudiDriversCount', 'السعودية', isDark,
-                          onTap: _focusOnSaudi),
-                      _buildRegionChip('عمان $_omanDriversCount', 'عمان', isDark,
-                          onTap: _focusOnOman),
-                      _buildRegionChip(
-                          'الإمارات $_uaeDriversCount', 'الإمارات', isDark),
-                      _buildRegionChip(
-                          'اليمن $_yemenDriversCount', 'اليمن', isDark,
-                          onTap: _focusOnYemen),
-                      _buildRegionChip('+ المزيد', 'all', isDark),
-                    ],
+          // 3. Driver Cards List
+          Expanded(
+            child: ListView.separated(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 12),
+              itemCount: availableTrucks.length,
+              separatorBuilder: (context, index) => Divider(
+                height: 14,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : const Color(0xFFF8FAFC),
+              ),
+              itemBuilder: (context, index) {
+                final truck = availableTrucks[index];
+                return _buildDriverListItem(truck, isDark);
+              },
             ),
           ),
         ],
@@ -1412,178 +1354,346 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
     );
   }
 
-  Widget _buildRegionChip(String label, String filterKey, bool isDark,
-      {VoidCallback? onTap}) {
-    final isSelected = _selectedRegionFilter == filterKey;
-
+  Widget _buildDriverListItem(AvailableTruckMarker truck, bool isDark) {
     return Padding(
-      padding: const EdgeInsets.only(left: 6),
-      child: ActionChip(
-        label: Text(label),
-        onPressed: () {
-          if (onTap != null) {
-            onTap();
-          } else {
-            setState(() {
-              _selectedRegionFilter = isSelected ? 'all' : filterKey;
-            });
-          }
-        },
-        backgroundColor: isSelected
-            ? const Color(0xFF0F172A)
-            : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9)),
-        labelStyle: GoogleFonts.cairo(
-          fontSize: 11,
-          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
-          color: isSelected
-              ? Colors.white
-              : (isDark ? AppColors.textWhite : const Color(0xFF334155)),
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        side: BorderSide(
-          color: isSelected
-              ? const Color(0xFF0F172A)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : const Color(0xFFE2E8F0)),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSelectedDriverCard(AvailableTruckMarker truck, bool isDark) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E293B) : Colors.white,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.16),
-            blurRadius: 18,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
         children: [
-          Row(
-            children: [
-              // Avatar
-              Container(
-                width: 48,
-                height: 48,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF0F172A),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: AppColors.primaryGold,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          truck.driverName,
-                          style: GoogleFonts.cairo(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.w800,
-                            color: isDark
-                                ? AppColors.textWhite
-                                : AppColors.textMainLight,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFDCFCE7),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'موثق ✓',
-                            style: GoogleFonts.cairo(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              color: const Color(0xFF166534),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    Text(
-                      '${truck.vehicleType} · ${truck.capacity} · ${truck.currentCity} (${truck.currentCountry})',
-                      style: GoogleFonts.cairo(
-                        fontSize: 11,
-                        color: isDark
-                            ? AppColors.textSubtle
-                            : const Color(0xFF64748B),
-                      ),
-                    ),
-                  ],
+          // 1. Action Button on the LEFT: "عرض التفاصيل"
+          InkWell(
+            onTap: () {
+              setState(() => _selectedMarker = truck);
+              widget.onViewDriverProfile?.call(truck);
+            },
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFECFDF5), // Soft mint green
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFFA7F3D0), // Light emerald border
+                  width: 1.0,
                 ),
               ),
-              IconButton(
-                icon: const Icon(Icons.close_rounded, size: 20),
-                onPressed: () => setState(() => _selectedMarker = null),
+              child: Text(
+                'عرض التفاصيل',
+                style: GoogleFonts.cairo(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  color: const Color(0xFF059669), // Emerald green
+                ),
               ),
-            ],
+            ),
           ),
 
-          // Return to Yemen Special Banner (Section 6)
-          if (truck.returnToYemenAvailable) ...[
-            const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: const Color(0xFFECFDF5),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFF86EFAC)),
-              ),
-              child: Row(
+          const SizedBox(width: 8),
+
+          // 2. Middle Column: Rating and Distance
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Distance
+              Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.assignment_return_rounded,
-                      size: 16, color: Color(0xFF16A34A)),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'متاح للعودة إلى اليمن 🇾🇪 • الوجهة المطلوبة: ${truck.preferredReturnDestination ?? 'صنعاء / عدن'}',
-                      style: GoogleFonts.cairo(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        color: const Color(0xFF166534),
-                      ),
+                  const Icon(
+                    Icons.location_on_outlined,
+                    size: 13,
+                    color: Color(0xFF64748B),
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    '${truck.distanceKm} كم',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: isDark ? Colors.white70 : const Color(0xFF334155),
                     ),
                   ),
                 ],
               ),
+              const SizedBox(height: 2),
+              // Rating
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.star_rounded,
+                    size: 15,
+                    color: Color(0xFFF59E0B),
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    truck.rating.toStringAsFixed(1),
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.0,
+                      fontWeight: FontWeight.w800,
+                      color: isDark ? Colors.white : const Color(0xFF0F172A),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+
+          const SizedBox(width: 10),
+
+          // 3. Driver Info Column in the middle (Expanded)
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  truck.driverName,
+                  style: GoogleFonts.cairo(
+                    fontSize: 14.0,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  truck.vehicleType,
+                  style: GoogleFonts.cairo(
+                    fontSize: 11.0,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.location_on_rounded,
+                      size: 11,
+                      color: Color(0xFF94A3B8),
+                    ),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(
+                        '${truck.currentCity} - ${truck.currentCountry.replaceAll('المملكة العربية السعودية', 'السعودية')}',
+                        style: GoogleFonts.cairo(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF94A3B8),
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
 
-          const SizedBox(height: 12),
+          const SizedBox(width: 10),
 
-          // Action Buttons
+          // 4. Driver Avatar with Online Dot on RIGHT
+          Stack(
+            children: [
+              CircleAvatar(
+                radius: 23,
+                backgroundColor: const Color(0xFFE2E8F0),
+                backgroundImage: AssetImage(truck.avatarAsset),
+              ),
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  width: 11,
+                  height: 11,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Compact Driver Details Sheet when a marker is tapped
+  Widget _buildSelectedDriverCard(AvailableTruckMarker driver, bool isDark) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF0F172A) : Colors.white,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.15),
+            blurRadius: 16,
+            offset: const Offset(0, -4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Close Icon and Handle
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 20),
+                onPressed: () => setState(() => _selectedMarker = null),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: 20),
+            ],
+          ),
+
+          const SizedBox(height: 8),
+
+          // Driver Identity Row
           Row(
             children: [
-              // Direct Order CTA
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Image.asset(
+                  driver.avatarAsset,
+                  width: 50,
+                  height: 50,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 50,
+                    height: 50,
+                    color: const Color(0xFFE2E8F0),
+                    child: const Icon(Icons.person, color: Color(0xFF64748B)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
               Expanded(
-                flex: 5,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          driver.driverName,
+                          style: GoogleFonts.cairo(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w800,
+                            color: isDark
+                                ? AppColors.textWhite
+                                : const Color(0xFF0F172A),
+                          ),
+                        ),
+                        if (driver.isVerified) ...[
+                          const SizedBox(width: 6),
+                          const Icon(Icons.check_circle_rounded,
+                              size: 15, color: Color(0xFF10B981)),
+                        ],
+                      ],
+                    ),
+                    Text(
+                      '${driver.vehicleType}  •  ${driver.capacity}',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11.5,
+                        color: isDark
+                            ? AppColors.textSubtle
+                            : const Color(0xFF64748B),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Row(
+                      children: [
+                        const Icon(Icons.location_on_rounded,
+                            size: 13, color: Color(0xFF2563EB)),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${driver.currentCity}، ${driver.currentCountry}',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            color: const Color(0xFF2563EB),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        if (driver.returnToYemenAvailable) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDCFCE7),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              'متاح للعودة إلى اليمن',
+                              style: GoogleFonts.cairo(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w800,
+                                color: const Color(0xFF16A34A),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // Action Buttons: Direct Order / View Profile
+          Row(
+            children: [
+              Expanded(
+                flex: 4,
+                child: OutlinedButton(
+                  onPressed: () {
+                    widget.onViewDriverProfile?.call(driver);
+                  },
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFF2563EB)),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: Text(
+                    'عرض الملف',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 6,
                 child: ElevatedButton.icon(
-                  onPressed: () => widget.onDirectOrder?.call(truck),
-                  icon: const Icon(Icons.send_rounded, size: 16),
+                  onPressed: () {
+                    widget.onDirectOrder?.call(driver);
+                  },
+                  icon: const Icon(Icons.local_shipping_outlined, size: 18),
                   label: Text(
-                    AppStrings.directOrderForDriver,
+                    'طلب نقل',
                     style: GoogleFonts.cairo(
                       fontSize: 13,
                       fontWeight: FontWeight.w800,
@@ -1592,59 +1702,13 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF2563EB),
                     foregroundColor: Colors.white,
-                    minimumSize: const Size(0, 42),
+                    elevation: 0,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-
-              // View Profile Button
-              Expanded(
-                flex: 4,
-                child: OutlinedButton(
-                  onPressed: () => widget.onViewDriverProfile?.call(truck),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFCBD5E1)),
-                    minimumSize: const Size(0, 42),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                  ),
-                  child: Text(
-                    AppStrings.viewOfficeProfileBtn,
-                    style: GoogleFonts.cairo(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: isDark
-                          ? AppColors.textWhite
-                          : AppColors.textMainLight,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-
-              // WhatsApp Messaging
-              IconButton.filledTonal(
-                onPressed: () {
-                  CommunicationLauncher.openWhatsApp(
-                    context,
-                    phoneNumber: truck.phone,
-                    message:
-                        'مرحباً كابتن ${truck.driverName}، رأيت شاحنتك على خريطة حمولة في ${truck.currentCity}، هل أنت متاح للشحن؟',
-                  );
-                },
-                icon: const Icon(Icons.chat_bubble_rounded,
-                    size: 18, color: Color(0xFF16A34A)),
-                style: IconButton.styleFrom(
-                  backgroundColor: const Color(0xFFDCFCE7),
-                ),
-                tooltip: 'واتساب',
               ),
             ],
           ),
@@ -1652,247 +1716,28 @@ class _MerchantMapScreenState extends State<MerchantMapScreen>
       ),
     );
   }
-
-  void _showDriversListModal(BuildContext context, bool isDark) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(ctx).size.height * 0.75,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : Colors.white,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFCBD5E1),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'قائمة الناقلات المتاحة (${_filteredTrucks.length})',
-                style: GoogleFonts.cairo(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? AppColors.textWhite : AppColors.textMainLight,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: ListView.separated(
-                  itemCount: _filteredTrucks.length,
-                  separatorBuilder: (_, index) => const Divider(height: 16),
-                  itemBuilder: (context, i) {
-                    final t = _filteredTrucks[i];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: t.isRefrigerated
-                              ? const Color(0xFFDBEAFE)
-                              : const Color(0xFFDCFCE7),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          t.isRefrigerated
-                              ? Icons.ac_unit_rounded
-                              : Icons.local_shipping_rounded,
-                          color: t.isRefrigerated
-                              ? const Color(0xFF2563EB)
-                              : const Color(0xFF16A34A),
-                        ),
-                      ),
-                      title: Row(
-                        children: [
-                          Text(
-                            t.driverName,
-                            style: GoogleFonts.cairo(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          if (t.returnToYemenAvailable) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFECFDF5),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(color: const Color(0xFF86EFAC)),
-                              ),
-                              child: Text(
-                                'عودة لليمن 🇾🇪',
-                                style: GoogleFonts.cairo(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w800,
-                                  color: const Color(0xFF166534),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      subtitle: Text(
-                        '${t.vehicleType} · ${t.capacity} · ${t.currentCity} (${t.currentCountry})',
-                        style: GoogleFonts.cairo(fontSize: 11),
-                      ),
-                      trailing: TextButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          setState(() => _selectedMarker = t);
-                        },
-                        child: const Text('عرض'),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
 }
 
-/// Custom painter for the Arabian Peninsula and Yemen topographic map.
-/// Faithfully reproduces the regional cartography of Image 2 & Image 3.
-class _RegionalMapPainter extends CustomPainter {
-  final bool isDark;
-  final bool isSatellite;
-  final bool isZoomedYemen;
-
-  const _RegionalMapPainter({
-    required this.isDark,
-    required this.isSatellite,
-    required this.isZoomedYemen,
-  });
+class _ScaleBarPainter extends CustomPainter {
+  final Color color;
+  _ScaleBarPainter({required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 1. Water Background (Red Sea, Arabian Sea, Persian Gulf)
-    final waterColor = isDark
-        ? const Color(0xFF0A192F)
-        : (isSatellite ? const Color(0xFF1E3A5F) : const Color(0xFFBAE6FD));
-    final waterPaint = Paint()..color = waterColor;
-    canvas.drawRect(Offset.zero & size, waterPaint);
-
-    // 2. Arabian Peninsula Landmass Polygon
-    final landColor = isDark
-        ? const Color(0xFF1E293B)
-        : (isSatellite ? const Color(0xFFD4C5A9) : const Color(0xFFFEF3C7));
-    final landPaint = Paint()
-      ..color = landColor
-      ..style = PaintingStyle.fill;
-
-    final peninsulaPath = Path();
-    // Rough stylized polygon of the Arabian Peninsula
-    peninsulaPath.moveTo(size.width * 0.20, size.height * 0.15); // Jordan / North
-    peninsulaPath.lineTo(size.width * 0.65, size.height * 0.15); // Iraq / Kuwait
-    peninsulaPath.lineTo(size.width * 0.72, size.height * 0.32); // Gulf / Qatar
-    peninsulaPath.lineTo(size.width * 0.85, size.height * 0.38); // UAE / Hormuz
-    peninsulaPath.lineTo(size.width * 0.92, size.height * 0.48); // Oman coast
-    peninsulaPath.lineTo(size.width * 0.82, size.height * 0.70); // Salalah
-    peninsulaPath.lineTo(size.width * 0.60, size.height * 0.80); // Yemen south coast
-    peninsulaPath.lineTo(size.width * 0.45, size.height * 0.86); // Aden
-    peninsulaPath.lineTo(size.width * 0.33, size.height * 0.84); // Bab al-Mandab
-    peninsulaPath.lineTo(size.width * 0.26, size.height * 0.65); // Red Sea coast (Hodeidah / Jizan)
-    peninsulaPath.lineTo(size.width * 0.22, size.height * 0.45); // Jeddah
-    peninsulaPath.lineTo(size.width * 0.18, size.height * 0.28); // Yanbu / Tabuk
-    peninsulaPath.close();
-
-    canvas.drawPath(peninsulaPath, landPaint);
-
-    // 3. African Coastline (Egypt, Sudan, Eritrea, Djibouti, Somalia)
-    final africaPaint = Paint()
-      ..color = isDark
-          ? const Color(0xFF162032)
-          : (isSatellite ? const Color(0xFFC7B89C) : const Color(0xFFFDE68A));
-
-    final africaPath = Path();
-    africaPath.moveTo(0, size.height * 0.20);
-    africaPath.lineTo(size.width * 0.14, size.height * 0.30); // Egypt
-    africaPath.lineTo(size.width * 0.12, size.height * 0.52); // Sudan
-    africaPath.lineTo(size.width * 0.22, size.height * 0.72); // Eritrea
-    africaPath.lineTo(size.width * 0.28, size.height * 0.84); // Djibouti
-    africaPath.lineTo(size.width * 0.40, size.height * 0.94); // Somalia Horn
-    africaPath.lineTo(0, size.height);
-    africaPath.close();
-    canvas.drawPath(africaPath, africaPaint);
-
-    // 4. International Borders / Boundaries
-    final borderPaint = Paint()
-      ..color = isDark
-          ? Colors.white.withValues(alpha: 0.15)
-          : const Color(0xFF94A3B8).withValues(alpha: 0.45)
-      ..strokeWidth = 1.2
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.4
       ..style = PaintingStyle.stroke;
 
-    // Saudi - Yemen Border
-    final saudiYemenBorder = Path();
-    saudiYemenBorder.moveTo(size.width * 0.28, size.height * 0.63); // Midi / Haradh
-    saudiYemenBorder.lineTo(size.width * 0.42, size.height * 0.60); // Saada / Najran
-    saudiYemenBorder.lineTo(size.width * 0.58, size.height * 0.62); // Al-Wadiah / Rub al-Khali
-    canvas.drawPath(saudiYemenBorder, borderPaint);
-
-    // Oman - Yemen Border
-    final omanYemenBorder = Path();
-    omanYemenBorder.moveTo(size.width * 0.58, size.height * 0.62);
-    omanYemenBorder.lineTo(size.width * 0.68, size.height * 0.72); // Shahan / Sarfayt
-    canvas.drawPath(omanYemenBorder, borderPaint);
-
-    // 5. Main Trade & Highway Corridors
-    final roadPaint = Paint()
-      ..color = isDark
-          ? const Color(0xFF475569)
-          : const Color(0xFFCBD5E1)
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
-
-    // Riyadh -> Jeddah highway
-    canvas.drawLine(Offset(size.width * 0.50, size.height * 0.34),
-        Offset(size.width * 0.28, size.height * 0.44), roadPaint);
-
-    // Riyadh -> Al-Wadiah -> Sana'a
-    final riyadhSanaaRoute = Path();
-    riyadhSanaaRoute.moveTo(size.width * 0.50, size.height * 0.34);
-    riyadhSanaaRoute.lineTo(size.width * 0.49, size.height * 0.62); // Wadiah
-    riyadhSanaaRoute.lineTo(size.width * 0.40, size.height * 0.69); // Sana'a
-    canvas.drawPath(riyadhSanaaRoute, roadPaint);
-
-    // Sana'a -> Taiz -> Aden highway
-    final yemenMainArtery = Path();
-    yemenMainArtery.moveTo(size.width * 0.40, size.height * 0.69);
-    yemenMainArtery.lineTo(size.width * 0.36, size.height * 0.77); // Taiz
-    yemenMainArtery.lineTo(size.width * 0.47, size.height * 0.81); // Aden
-    canvas.drawPath(yemenMainArtery, roadPaint);
-
-    // Salalah -> Shahan -> Mukalla
-    final omanYemenRoute = Path();
-    omanYemenRoute.moveTo(size.width * 0.70, size.height * 0.66); // Salalah
-    omanYemenRoute.lineTo(size.width * 0.65, size.height * 0.70); // Shahan
-    omanYemenRoute.lineTo(size.width * 0.58, size.height * 0.78); // Mukalla
-    canvas.drawPath(omanYemenRoute, roadPaint);
+    // Baseline along the bottom
+    canvas.drawLine(Offset(0, size.height), Offset(size.width, size.height), paint);
+    // Ticks at 0%, 33%, 66%, 100%
+    canvas.drawLine(const Offset(0, 0), Offset(0, size.height), paint);
+    canvas.drawLine(Offset(size.width * 0.33, 0), Offset(size.width * 0.33, size.height), paint);
+    canvas.drawLine(Offset(size.width * 0.66, 0), Offset(size.width * 0.66, size.height), paint);
+    canvas.drawLine(Offset(size.width, 0), Offset(size.width, size.height), paint);
   }
 
   @override
-  bool shouldRepaint(covariant _RegionalMapPainter oldDelegate) {
-    return oldDelegate.isDark != isDark ||
-        oldDelegate.isSatellite != isSatellite ||
-        oldDelegate.isZoomedYemen != isZoomedYemen;
-  }
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

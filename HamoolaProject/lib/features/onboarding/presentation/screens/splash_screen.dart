@@ -8,6 +8,7 @@ import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimensions.dart';
+import '../../../../core/storage/app_preferences.dart';
 
 /// The official Splash Screen of the Hamoola platform.
 /// Directly mirrors the HTML/CSS/JS prototype with faithful visual tokens,
@@ -17,7 +18,7 @@ class SplashScreen extends StatefulWidget {
 
   const SplashScreen({
     super.key,
-    this.duration = const Duration(milliseconds: 3000),
+    this.duration = const Duration(milliseconds: 800),
   });
 
   @override
@@ -79,7 +80,12 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _onTimerComplete() {
     if (!mounted) return;
-    context.go(AppRoutes.onboarding1);
+    final targetRoute = AppPreferences.instance.resolveInitialRoute();
+    if (targetRoute == AppRoutes.splash) {
+      context.go(AppRoutes.onboarding1);
+    } else {
+      context.go(targetRoute);
+    }
   }
 
   @override

@@ -24,7 +24,7 @@ void main() {
   }
 
   group('MerchantAccountScreen Tests', () {
-    testWidgets('renders account hub with profile, stats, menu items, and actions',
+    testWidgets('renders account hub matching Image 4 with profile card, metrics, and menu groups',
         (tester) async {
       bool backTapped = false;
       bool walletTapped = false;
@@ -48,40 +48,52 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify Header and Bottom Nav Account Label
-      expect(find.text(AppStrings.merchantAccountTitle), findsWidgets);
+      expect(find.text('حسابي'), findsWidgets);
 
-      // Verify Profile Info & Verified Badge
-      expect(find.text('محمد أحمد'), findsOneWidget);
-      expect(find.text(AppStrings.merchantVerifiedBadge), findsOneWidget);
-      expect(find.text('مؤسسة الأمل التجارية'), findsOneWidget);
+      // Verify Profile Info & Verified / Commercial Badges
+      expect(find.text('مؤسسة النور للتجارة العامة'), findsOneWidget);
+      expect(find.text('موثق'), findsOneWidget);
+      expect(find.text('حساب تجاري'), findsOneWidget);
+      expect(find.text('+967 777 123 456'), findsOneWidget);
+      expect(find.text('783707104'), findsOneWidget);
 
-      // Verify Stats
-      expect(find.text('24'), findsOneWidget);
-      expect(find.text(AppStrings.completedTripsStatLabel), findsOneWidget);
-      expect(find.text('4.9 ★'), findsOneWidget);
-      expect(find.text(AppStrings.ratingStatLabel), findsOneWidget);
-      expect(find.text('98%'), findsOneWidget);
-      expect(find.text(AppStrings.commitmentStatLabel), findsOneWidget);
+      // Verify 3 Activity Summary Indicators
+      expect(find.text('حمولة مسجلة'), findsOneWidget);
+      expect(find.text('طلبات نشطة'), findsOneWidget);
+      expect(find.text('رحلة مكتملة'), findsOneWidget);
 
-      // Verify Menu Items
-      expect(find.text(AppStrings.myWalletMenuTitle), findsOneWidget);
-      expect(find.text(AppStrings.companyVerifyMenuTitle), findsOneWidget);
-      expect(find.text(AppStrings.verificationCompleteBadge), findsOneWidget);
-      expect(find.text(AppStrings.generalSettingsMenuTitle), findsOneWidget);
-      expect(find.text(AppStrings.customerSupportMenuTitle), findsOneWidget);
-      expect(find.text(AppStrings.termsAndPrivacyMenuTitle), findsOneWidget);
-      expect(find.text(AppStrings.logoutMenuTitle), findsOneWidget);
+      // Verify Menu Groups & Items (Image 2)
+      expect(find.text('بيانات المؤسسة'), findsOneWidget);
+      expect(find.text('تعديل بيانات المؤسسة'), findsWidgets);
+      expect(find.text('بيانات السجل التجاري'), findsOneWidget);
+      expect(find.text('معلومات المؤسسة'), findsOneWidget);
+      expect(find.text('بيانات التواصل'), findsOneWidget);
+      expect(find.text('العنوان والموقع'), findsOneWidget);
+
+      expect(find.text('عمليات حمولة'), findsOneWidget);
+      expect(find.text('طلباتي'), findsWidgets);
+      expect(find.text('حمولاتي'), findsOneWidget);
+      expect(find.text('محفظتي'), findsOneWidget);
+      expect(find.text('إدارة عروض الأسعار'), findsOneWidget);
+
+      expect(find.text('الخصوصية والأمان'), findsOneWidget);
+      expect(find.text('الدعم والمساعدة'), findsOneWidget);
+      expect(find.text('تسجيل الخروج'), findsOneWidget);
 
       // Tap Wallet menu
-      await tester.tap(find.text(AppStrings.myWalletMenuTitle));
+      await tester.tap(find.text('محفظتي'));
       expect(walletTapped, isTrue);
 
       // Tap Support menu
-      await tester.tap(find.text(AppStrings.customerSupportMenuTitle));
+      await tester.ensureVisible(find.text('خدمة العملاء'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('خدمة العملاء'));
       expect(supportTapped, isTrue);
 
       // Tap Logout
-      await tester.tap(find.text(AppStrings.logoutMenuTitle));
+      await tester.ensureVisible(find.text('تسجيل الخروج'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('تسجيل الخروج'));
       expect(logoutTapped, isTrue);
 
       // Tap Back button

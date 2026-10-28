@@ -6,6 +6,7 @@ import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimensions.dart';
 import '../../domain/models/driver_offer.dart';
+import '../../domain/models/merchant_simulation_store.dart';
 
 enum OffersFilter {
   all,
@@ -43,7 +44,11 @@ class _MerchantOffersReviewScreenState
   @override
   void initState() {
     super.initState();
-    _offers = List.from(DriverOffer.demoOffers);
+    final storeOffers =
+        MerchantSimulationStore.instance.getOffersForOrder(widget.orderId);
+    _offers = storeOffers.isNotEmpty
+        ? List.from(storeOffers)
+        : List.from(DriverOffer.demoOffers);
   }
 
   List<DriverOffer> get _filteredOffers {
@@ -60,241 +65,6 @@ class _MerchantOffersReviewScreenState
       case OffersFilter.fastest:
         return list.where((o) => o.isFastest || o.pickupTimeText.contains('ساعة')).toList();
     }
-  }
-
-  void _showNegotiationSheet(DriverOffer offer) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final controller = TextEditingController(
-      text: (offer.price - 20000).toInt().toString(),
-    );
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: isDark ? const Color(0xFF1E293B) : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return Directionality(
-          textDirection: TextDirection.rtl,
-          child: Padding(
-            padding: EdgeInsets.only(
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-              left: 20,
-              right: 20,
-              top: 16,
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Modal Handle
-                Center(
-                  child: Container(
-                    width: 38,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.white24 : Colors.black12,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Header
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: const BoxDecoration(
-                        color: Color(0x2EF59E0B),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.handshake_outlined,
-                        color: AppColors.primaryGold,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppStrings.counterOfferTitle,
-                            style: GoogleFonts.cairo(
-                              fontSize: 15.5,
-                              fontWeight: FontWeight.w800,
-                              color: isDark
-                                  ? AppColors.textWhite
-                                  : const Color(0xFF0F172A),
-                            ),
-                          ),
-                          Text(
-                            'للسائق: ${offer.driverName}',
-                            style: GoogleFonts.cairo(
-                              fontSize: 11.5,
-                              color: isDark
-                                  ? AppColors.textSubtle
-                                  : AppColors.textMutedLight,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-
-                // Original Price Reference
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: isDark
-                          ? Colors.white.withValues(alpha: 0.08)
-                          : const Color(0xFFE2E8F0),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'عرض السائق الأصلي:',
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          color: isDark ? AppColors.textSubtle : const Color(0xFF64748B),
-                        ),
-                      ),
-                      Text(
-                        '${offer.formattedPrice} ر.ي',
-                        style: GoogleFonts.cairo(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
-                          color: isDark ? AppColors.textWhite : const Color(0xFF0F172A),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Counter price input
-                Text(
-                  'سعرك المقترح (ريال يمني):',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                    color: isDark ? AppColors.textWhite : const Color(0xFF0F172A),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: controller,
-                  keyboardType: TextInputType.number,
-                  textAlign: TextAlign.center,
-                  style: GoogleFonts.cairo(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primaryGold,
-                  ),
-                  decoration: InputDecoration(
-                    suffixText: 'ر.ي',
-                    filled: true,
-                    fillColor: isDark ? const Color(0xFF0F172A) : Colors.white,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.primaryGold),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // Quick reduction buttons
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildQuickReductionChip('-10,000', controller, offer.price - 10000, isDark),
-                    _buildQuickReductionChip('-20,000', controller, offer.price - 20000, isDark),
-                    _buildQuickReductionChip('-30,000', controller, offer.price - 30000, isDark),
-                  ],
-                ),
-                const SizedBox(height: 20),
-
-                // Send action
-                SizedBox(
-                  height: 46,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            AppStrings.counterOfferSentSuccess,
-                            style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
-                          ),
-                          backgroundColor: AppColors.success,
-                          duration: const Duration(seconds: 2),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryGold,
-                      foregroundColor: const Color(0xFF0F172A),
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: Text(
-                      AppStrings.sendCounterOfferBtn,
-                      style: GoogleFonts.cairo(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildQuickReductionChip(
-    String label,
-    TextEditingController controller,
-    double value,
-    bool isDark,
-  ) {
-    return InkWell(
-      onTap: () {
-        controller.text = value.toInt().toString();
-      },
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF334155) : const Color(0xFFF1F5F9),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.cairo(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-            color: isDark ? AppColors.textWhite : const Color(0xFF334155),
-          ),
-        ),
-      ),
-    );
   }
 
   void _showAcceptConfirmationModal(DriverOffer offer) {
@@ -1015,36 +785,6 @@ class _MerchantOffersReviewScreenState
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Negotiate Button
-                  OutlinedButton(
-                    onPressed: () => _showNegotiationSheet(offer),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: isDark
-                          ? AppColors.textWhite
-                          : const Color(0xFF0F172A),
-                      side: BorderSide(
-                        color: isDark
-                            ? Colors.white24
-                            : const Color(0xFFCBD5E1),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
-                      minimumSize: Size.zero,
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text(
-                      AppStrings.negotiateOfferBtn,
-                      style: GoogleFonts.cairo(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-
                   // Accept Button
                   ElevatedButton.icon(
                     onPressed: () => _showAcceptConfirmationModal(offer),

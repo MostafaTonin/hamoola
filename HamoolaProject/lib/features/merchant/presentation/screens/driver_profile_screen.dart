@@ -5,7 +5,9 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/communication_launcher.dart';
+import '../../domain/models/merchant_order.dart';
 import '../../domain/models/transport_order_draft.dart';
+import '../../../transport_office/domain/models/transport_office_drivers_store.dart';
 
 /// Screen representing the Driver Profile screen in Hamoola.
 /// Faithfully reproduces Image 1:
@@ -22,6 +24,7 @@ class DriverProfileScreen extends StatefulWidget {
   final DriverProfile driver;
   final VoidCallback? onBack;
   final ValueChanged<DriverProfile>? onDirectOrder;
+  final ValueChanged<DriverProfile>? onCreateNewOrderWithDriver;
   final ValueChanged<String>? onCall;
   final ValueChanged<String>? onMessage;
 
@@ -30,6 +33,7 @@ class DriverProfileScreen extends StatefulWidget {
     this.driver = DriverProfile.demoDriver,
     this.onBack,
     this.onDirectOrder,
+    this.onCreateNewOrderWithDriver,
     this.onCall,
     this.onMessage,
   });
@@ -45,6 +49,17 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
   void initState() {
     super.initState();
     _selectedCargo = widget.driver.selectedCargoType;
+    TransportOfficeDriversStore.instance.addListener(_onEndorsementStoreChanged);
+  }
+
+  @override
+  void dispose() {
+    TransportOfficeDriversStore.instance.removeListener(_onEndorsementStoreChanged);
+    super.dispose();
+  }
+
+  void _onEndorsementStoreChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
@@ -105,6 +120,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
 
                       // 8. Section: تقييمات العملاء
                       _buildReviewsSection(driver, isDark),
+
+                      const SizedBox(height: 14),
+
+                      // 8.5. Section: التزكيات (Endorsements)
+                      _buildEndorsementsSection(driver, isDark),
 
                       const SizedBox(height: 20),
                     ],
@@ -175,16 +195,21 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                     onTap: widget.onBack,
                     tooltip: AppStrings.back,
                   ),
-                  const Spacer(),
-                  Text(
-                    'الملف الشخصي للسائق',
-                    style: GoogleFonts.cairo(
-                      fontSize: 16.5,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'الملف الشخصي للسائق',
+                      textAlign: TextAlign.center,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   _buildCircleBtn(
                     icon: Icons.share_outlined,
                     onTap: () {
@@ -387,12 +412,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
               children: [
                 Row(
                   children: [
-                    Text(
-                      driver.name,
-                      style: GoogleFonts.cairo(
-                        fontSize: 18.5,
-                        fontWeight: FontWeight.w900,
-                        color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                    Flexible(
+                      child: Text(
+                        driver.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.cairo(
+                          fontSize: 18.5,
+                          fontWeight: FontWeight.w900,
+                          color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -623,24 +652,27 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                   borderRadius: BorderRadius.circular(10),
                   child: Image.asset(
                     driver.heroTruckAsset,
-                    width: 100,
-                    height: 72,
+                    width: 92,
+                    height: 70,
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => Container(
-                      width: 100,
-                      height: 72,
+                      width: 92,
+                      height: 70,
                       color: const Color(0xFFCBD5E1),
                       child: const Icon(Icons.local_shipping_rounded,
                           color: Colors.white),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
                           Text(
                             driver.vehicleModel,
@@ -652,7 +684,6 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                                   : AppColors.textMainLight,
                             ),
                           ),
-                          const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 6, vertical: 1),
@@ -671,9 +702,11 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 3),
                       Text(
                         'موديل ${driver.vehicleYear} | لوحة رقم: ${driver.plateNumber}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.cairo(
                           fontSize: 10.5,
                           color: isDark
@@ -877,11 +910,14 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _buildSectionHeader(
-                icon: Icons.star_rounded,
-                title: 'تقييمات العملاء',
-                isDark: isDark,
+              Expanded(
+                child: _buildSectionHeader(
+                  icon: Icons.star_rounded,
+                  title: 'تقييمات العملاء',
+                  isDark: isDark,
+                ),
               ),
+              const SizedBox(width: 8),
               InkWell(
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -997,6 +1033,198 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
     );
   }
 
+  // ===========================================================================
+  // Section: التزكيات (Endorsements from Transport Offices)
+  // ===========================================================================
+  Widget _buildEndorsementsSection(DriverProfile driver, bool isDark) {
+    final store = TransportOfficeDriversStore.instance;
+    // Look up in store by ID or by name
+    final matchingDriver = store.findDriverById(driver.id) ??
+        store.searchDrivers(driver.name).firstOrNull;
+
+    final List<EndorsingOfficeInfo> offices = matchingDriver?.endorsingOffices ??
+        (driver.isVerified
+            ? [
+                const EndorsingOfficeInfo(
+                  officeId: 'OFFICE-01',
+                  officeName: 'مكتب النور للنقل السريع',
+                  officeLogo: 'assets/images/merchant_company_logo.png',
+                ),
+              ]
+            : const []);
+
+    return _buildSectionContainer(
+      isDark: isDark,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: _buildSectionHeader(
+                  icon: Icons.verified_user_rounded,
+                  title: 'التزكيات',
+                  isDark: isDark,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFDBEAFE)),
+                ),
+                child: Text(
+                  '${offices.length} مكاتب معتمدة',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          if (offices.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'لا توجد تزكيات مسجلة من مكاتب النقل حالياً.',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  color: isDark ? AppColors.textSubtle : const Color(0xFF64748B),
+                ),
+              ),
+            )
+          else
+            Column(
+              children: offices.map((office) {
+                return InkWell(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (dlgCtx) => Directionality(
+                        textDirection: TextDirection.rtl,
+                        child: AlertDialog(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          title: Row(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFEFF6FF),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: Icon(
+                                    Icons.business_rounded,
+                                    size: 20,
+                                    color: Color(0xFF2563EB),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  office.officeName,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: Text(
+                            'مكتب نقل بري مرخص ومعتمد لدى منصة حمولة يزكي هذا السائق بناءً على سجل أدائه وسلامة المنقولات.',
+                            style: GoogleFonts.cairo(
+                              fontSize: 12.5,
+                              color: const Color(0xFF475569),
+                              height: 1.5,
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(dlgCtx),
+                              child: Text(
+                                'إغلاق',
+                                style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        // Office Logo / Icon
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: const Color(0xFFEFF6FF),
+                            border: Border.all(color: const Color(0xFFBFDBFE)),
+                          ),
+                          child: ClipOval(
+                            child: Image.asset(
+                              office.officeLogo,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const Icon(
+                                Icons.business_rounded,
+                                size: 18,
+                                color: Color(0xFF2563EB),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        // Office Name
+                        Expanded(
+                          child: Text(
+                            office.officeName,
+                            style: GoogleFonts.cairo(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.verified_rounded,
+                          size: 18,
+                          color: Color(0xFF10B981),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildSectionContainer({
     required Widget child,
     required bool isDark,
@@ -1035,12 +1263,16 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       children: [
         Icon(icon, size: 18, color: const Color(0xFF2563EB)),
         const SizedBox(width: 6),
-        Text(
-          title,
-          style: GoogleFonts.cairo(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w800,
-            color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+        Flexible(
+          child: Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.cairo(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+              color: isDark ? AppColors.textWhite : AppColors.textMainLight,
+            ),
           ),
         ),
       ],
@@ -1114,7 +1346,7 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
           Expanded(
             flex: 6,
             child: ElevatedButton.icon(
-              onPressed: () => widget.onDirectOrder?.call(driver),
+              onPressed: () => _showOrderSelectionModal(context, driver),
               icon: const Icon(Icons.local_shipping_outlined,
                   size: 20, color: Colors.white),
               label: Text(
@@ -1140,4 +1372,285 @@ class _DriverProfileScreenState extends State<DriverProfileScreen> {
       ),
     );
   }
+
+  void _showOrderSelectionModal(BuildContext context, DriverProfile driver) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final pendingOrders = MerchantOrder.demoOrders
+        .where((o) => o.status == MerchantOrderStatus.pendingDriver)
+        .toList();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: isDark ? const Color(0xFF0F172A) : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              16,
+              12,
+              16,
+              MediaQuery.of(sheetContext).padding.bottom + 16,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Drag handle
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: isDark ? Colors.white24 : const Color(0xFFCBD5E1),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFEFF6FF),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.local_shipping_outlined,
+                              size: 20, color: Color(0xFF2563EB)),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'طلب نقل من ${driver.name}',
+                              style: GoogleFonts.cairo(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: isDark
+                                    ? AppColors.textWhite
+                                    : const Color(0xFF0F172A),
+                              ),
+                            ),
+                            Text(
+                              'اختر طلباً موجوداً أو أنشئ طلباً جديداً',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                color: isDark
+                                    ? AppColors.textSubtle
+                                    : const Color(0xFF64748B),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, size: 20),
+                      onPressed: () => Navigator.pop(sheetContext),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // Case A: Existing orders
+                if (pendingOrders.isNotEmpty) ...[
+                  Text(
+                    'طلبات النقل الحالية (بانتظار سائق)',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: const Color(0xFF2563EB),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: pendingOrders.length,
+                      separatorBuilder: (context, index) => const SizedBox(height: 8),
+                      itemBuilder: (ctx, idx) {
+                        final order = pendingOrders[idx];
+                        return Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.white12
+                                  : const Color(0xFFE2E8F0),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.inventory_2_outlined,
+                                  size: 18, color: Color(0xFFD97706)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${order.id} — ${order.cargoName}',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: isDark
+                                            ? AppColors.textWhite
+                                            : const Color(0xFF0F172A),
+                                      ),
+                                    ),
+                                    Text(
+                                      '${order.originCity} ← ${order.destinationCity}',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 11,
+                                        color: isDark
+                                            ? AppColors.textSubtle
+                                            : const Color(0xFF64748B),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              ElevatedButton(
+                                onPressed: () {
+                                  Navigator.pop(sheetContext);
+                                  // Assign driver to existing order simulation
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'تم إسناد الطلب ${order.id} إلى الكابتن ${driver.name} بنجاح'),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                  widget.onDirectOrder?.call(driver);
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF10B981),
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                ),
+                                child: Text(
+                                  'إسناد للسائق',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+
+                // Case B: Create new order
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1E293B)
+                        : const Color(0xFFEFF6FF),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.add_circle_outline_rounded,
+                              size: 18, color: Color(0xFF2563EB)),
+                          const SizedBox(width: 8),
+                          Text(
+                            'إنشاء طلب نقل جديد لهذا السائق',
+                            style: GoogleFonts.cairo(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              color: isDark
+                                  ? AppColors.textWhite
+                                  : const Color(0xFF1E3A8A),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'سيتم تحديد الكابتن ${driver.name} تلقائياً كجهة مستهدفة',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          color: isDark
+                              ? AppColors.textSubtle
+                              : const Color(0xFF64748B),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(sheetContext);
+                            if (widget.onCreateNewOrderWithDriver != null) {
+                              widget.onCreateNewOrderWithDriver!(driver);
+                            } else {
+                              widget.onDirectOrder?.call(driver);
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: Text(
+                            'إنشاء طلب نقل جديد',
+                            style: GoogleFonts.cairo(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
+

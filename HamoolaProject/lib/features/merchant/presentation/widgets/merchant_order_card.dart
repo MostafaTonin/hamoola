@@ -8,11 +8,17 @@ import '../../domain/models/merchant_order.dart';
 class MerchantOrderCard extends StatelessWidget {
   final MerchantOrder order;
   final VoidCallback? onDetails;
+  final VoidCallback? onTap;
+  final VoidCallback? onReviewOffers;
+  final VoidCallback? onOrderDetails;
 
   const MerchantOrderCard({
     super.key,
     required this.order,
     this.onDetails,
+    this.onTap,
+    this.onReviewOffers,
+    this.onOrderDetails,
   });
 
   @override
@@ -32,10 +38,20 @@ class MerchantOrderCard extends StatelessWidget {
     Color badgeTextColor;
 
     switch (order.status) {
+      case MerchantOrderStatus.draft:
+        badgeBg = const Color(0x1F64748B);
+        badgeBorder = const Color(0x4064748B);
+        badgeTextColor = const Color(0xFF94A3B8);
+        break;
       case MerchantOrderStatus.pendingDriver:
         badgeBg = const Color(0x2EF59E0B);
         badgeBorder = AppColors.primaryGold.withValues(alpha: 0.35);
         badgeTextColor = const Color(0xFFFBBF24);
+        break;
+      case MerchantOrderStatus.pendingOffice:
+        badgeBg = const Color(0x2E8B5CF6);
+        badgeBorder = const Color(0x598B5CF6);
+        badgeTextColor = const Color(0xFFA78BFA);
         break;
       case MerchantOrderStatus.assignedDriver:
         badgeBg = const Color(0x2E3B82F6);
@@ -54,23 +70,28 @@ class MerchantOrderCard extends StatelessWidget {
         break;
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: cardBg,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => (onTap ?? onOrderDetails ?? onDetails)?.call(),
         borderRadius: BorderRadius.circular(14.0),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
+        child: Container(
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(14.0),
+            border: Border.all(color: borderColor),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      padding: const EdgeInsets.all(12.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
           // Order Header: ID, cargo type & status badge
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -247,26 +268,33 @@ class MerchantOrderCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  if (order.offersCount > 0)
-                    Text(
-                      '${order.offersCount} عروض جديدة',
-                      style: GoogleFonts.cairo(
-                        fontSize: 10.0,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFFFBBF24),
+              Expanded(
+                child: Row(
+                  children: [
+                    if (order.offersCount > 0)
+                      Flexible(
+                        child: Text(
+                          '${order.offersCount} عروض جديدة',
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFFBBF24),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      )
+                    else if (order.driverName != null)
+                      Flexible(
+                        child: Text(
+                          '${AppStrings.driverPrefix}${order.driverName}',
+                          style: GoogleFonts.cairo(
+                            fontSize: 10.0,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFF93C5FD),
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    )
-                  else if (order.driverName != null)
-                    Text(
-                      '${AppStrings.driverPrefix}${order.driverName}',
-                      style: GoogleFonts.cairo(
-                        fontSize: 10.0,
-                        fontWeight: FontWeight.w700,
-                        color: const Color(0xFF93C5FD),
-                      ),
-                    ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 5.0),
                     child: Text(
@@ -287,8 +315,15 @@ class MerchantOrderCard extends StatelessWidget {
                   ),
                 ],
               ),
-              InkWell(
-                onTap: onDetails,
+            ),
+            InkWell(
+                onTap: () {
+                  if (order.offersCount > 0 && onReviewOffers != null) {
+                    onReviewOffers?.call();
+                  } else {
+                    (onOrderDetails ?? onDetails ?? onTap)?.call();
+                  }
+                },
                 borderRadius: BorderRadius.circular(7.0),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 9.0, vertical: 4.0),
@@ -307,7 +342,9 @@ class MerchantOrderCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        AppStrings.viewDetails,
+                        (order.offersCount > 0 && onReviewOffers != null)
+                            ? 'مراجعة العروض'
+                            : AppStrings.viewDetails,
                         style: GoogleFonts.cairo(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
@@ -328,6 +365,8 @@ class MerchantOrderCard extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ),
+  ),
+);
   }
 }

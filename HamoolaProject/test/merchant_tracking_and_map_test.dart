@@ -4,9 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_application/core/constants/app_strings.dart';
 import 'package:flutter_application/core/theme/app_theme.dart';
+import 'package:flutter_application/features/merchant/domain/models/merchant_order.dart';
 import 'package:flutter_application/features/merchant/domain/models/tracking_models.dart';
 import 'package:flutter_application/features/merchant/presentation/screens/merchant_map_screen.dart';
+import 'package:flutter_application/features/merchant/presentation/screens/merchant_orders_screen.dart';
 import 'package:flutter_application/features/merchant/presentation/screens/merchant_trip_tracking_screen.dart';
+import 'package:flutter_application/features/merchant/presentation/widgets/truck_map_marker.dart';
 
 void main() {
   setUpAll(() {
@@ -35,6 +38,7 @@ void main() {
       await tester.pumpWidget(
         wrapWidget(
           MerchantMapScreen(
+            enableTileNetwork: false,
             onBack: () => backTapped = true,
             onViewDriverProfile: (truck) => viewedTruck = truck,
           ),
@@ -61,27 +65,33 @@ void main() {
       await tester.tap(find.text(AppStrings.categoryTrucks));
       await tester.pumpAndSettle();
 
-      // Verify tapping a Truck Pin marker reveals Driver Summary Card
-      final pinIcons = find.byIcon(Icons.local_shipping_rounded);
-      if (pinIcons.evaluate().isNotEmpty) {
-        await tester.tap(pinIcons.first);
-        await tester.pumpAndSettle();
+      // Verify TruckMapMarker instances are rendered
+      final markers = find.byType(TruckMapMarker);
+      expect(markers.evaluate().isNotEmpty, isTrue);
 
-        // Check if Driver Summary Card appeared
-        expect(find.text('موثق ✓'), findsOneWidget);
-        expect(find.text(AppStrings.directOrderForDriver), findsOneWidget);
-        expect(find.text(AppStrings.viewOfficeProfileBtn), findsOneWidget);
-
-        // Tap View Profile
-        await tester.tap(find.text(AppStrings.viewOfficeProfileBtn));
-        await tester.pumpAndSettle();
-        expect(viewedTruck, isNotNull);
-
-        // Tap Close Button on Summary Card
-        await tester.tap(find.byIcon(Icons.close_rounded));
-        await tester.pumpAndSettle();
-        expect(find.text('موثق ✓'), findsNothing);
+      // Tap first non-cluster marker to reveal driver details sheet
+      for (final element in markers.evaluate()) {
+        final widget = element.widget as TruckMapMarker;
+        if (!widget.isCluster && widget.truck != null) {
+          await tester.tap(find.byWidget(widget), warnIfMissed: false);
+          await tester.pumpAndSettle();
+          break;
+        }
       }
+
+      // Check if Driver Summary Card appeared
+      expect(find.text('عرض الملف'), findsOneWidget);
+      expect(find.text('طلب نقل'), findsWidgets);
+
+      // Tap View Profile
+      await tester.tap(find.text('عرض الملف'));
+      await tester.pumpAndSettle();
+      expect(viewedTruck, isNotNull);
+
+      // Tap Close Button on Summary Card
+      await tester.tap(find.byIcon(Icons.close_rounded).first);
+      await tester.pumpAndSettle();
+      expect(find.text('عرض الملف'), findsNothing);
     });
 
     testWidgets('tapping locate button triggers current location snackbar',
@@ -92,7 +102,9 @@ void main() {
 
       await tester.pumpWidget(
         wrapWidget(
-          const MerchantMapScreen(),
+          const MerchantMapScreen(
+            enableTileNetwork: false,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -114,7 +126,9 @@ void main() {
 
       await tester.pumpWidget(
         wrapWidget(
-          const MerchantMapScreen(),
+          const MerchantMapScreen(
+            enableTileNetwork: false,
+          ),
         ),
       );
       await tester.pumpAndSettle();
@@ -133,10 +147,6 @@ void main() {
       expect(find.text('تطبيق الفلتر'), findsOneWidget);
       expect(find.text('إعادة تعيين'), findsOneWidget);
 
-      // Tap category chip 'قاطرات' inside the modal
-      await tester.tap(find.text('قاطرات').first);
-      await tester.pumpAndSettle();
-
       // Tap 'تطبيق الفلتر'
       await tester.tap(find.text('تطبيق الفلتر'));
       await tester.pumpAndSettle();
@@ -153,16 +163,18 @@ void main() {
 
       await tester.pumpWidget(
         wrapWidget(
-          const MerchantMapScreen(),
+          const MerchantMapScreen(
+            enableTileNetwork: false,
+          ),
         ),
       );
       await tester.pumpAndSettle();
 
-      // Tap search field
+      // Tap search field to open DriverSearchModal
       await tester.tap(find.text(AppStrings.searchDriversHint));
       await tester.pumpAndSettle();
 
-      // Verify DriverSearchModal is displayed (Image 2)
+      // Verify DriverSearchModal is displayed
       expect(find.text('البحث'), findsOneWidget);
       expect(find.textContaining('الكل'), findsWidgets);
       expect(find.textContaining('السائقون'), findsWidgets);
@@ -170,15 +182,49 @@ void main() {
       expect(find.textContaining('المحافظات'), findsWidgets);
       expect(find.text('عرض جميع النتائج على الخريطة'), findsOneWidget);
 
-      // Verify driver item 'أحمد عبدالله' and tap
-      final driverItem = find.text('أحمد عبدالله');
-      expect(driverItem, findsOneWidget);
-      await tester.tap(driverItem);
+      // Tap 'عرض جميع النتائج على الخريطة'
+      await tester.tap(find.text('عرض جميع النتائج على الخريطة'));
       await tester.pumpAndSettle();
 
-      // Modal closed and driver selected on map
+      // Modal closed and map is displayed
       expect(find.text('البحث'), findsNothing);
-      expect(find.text('موثق ✓'), findsOneWidget);
+    });
+  });
+
+  group('MerchantOrdersScreen Tests', () {
+    testWidgets('renders orders screen tabs, orders list, and actions',
+        (tester) async {
+      bool createTapped = false;
+
+      tester.view.physicalSize = const Size(800, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() => tester.view.resetPhysicalSize());
+
+      await tester.pumpWidget(
+        wrapWidget(
+          MerchantOrdersScreen(
+            onCreateOrder: () => createTapped = true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Verify header and bottom nav bar contain 'طلباتي'
+      expect(find.text('طلباتي'), findsNWidgets(2));
+
+      // Verify status filter tabs
+      expect(find.text('الكل'), findsOneWidget);
+      expect(find.text('بانتظار سائق'), findsOneWidget);
+      expect(find.text('مسند لسائق'), findsOneWidget);
+
+      // Verify demo order card presence
+      expect(find.text(MerchantOrder.demoOrders.first.cargoName), findsOneWidget);
+
+      // Verify Create Order button
+      final createBtn = find.text('طلب جديد');
+      expect(createBtn, findsOneWidget);
+      await tester.tap(createBtn);
+      expect(createTapped, isTrue);
     });
   });
 

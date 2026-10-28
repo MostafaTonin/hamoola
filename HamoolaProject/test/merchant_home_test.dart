@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_application/core/constants/app_strings.dart';
 import 'package:flutter_application/core/theme/app_theme.dart';
+import 'package:flutter_application/features/merchant/domain/models/merchant_profile.dart';
 import 'package:flutter_application/features/merchant/presentation/screens/merchant_home_screen.dart';
 import 'package:flutter_application/features/merchant/presentation/widgets/merchant_bottom_nav_bar.dart';
 import 'package:flutter_application/features/merchant/presentation/widgets/merchant_drawer.dart';
@@ -23,10 +24,12 @@ void main() {
   }
 
   testWidgets(
-      'MerchantHomeScreen renders screenshot UI: header greeting, hero banner, quick services and summary',
+      'MerchantHomeScreen renders Image 3 UI: header greeting, hero banner, main services and summary',
       (tester) async {
     bool createOrderTapped = false;
     bool cargosTapped = false;
+    bool mapTapped = false;
+    bool ordersTapped = false;
 
     await tester.pumpWidget(
       wrapWidget(
@@ -34,41 +37,50 @@ void main() {
           isVerified: true,
           onCreateOrder: () => createOrderTapped = true,
           onCargos: () => cargosTapped = true,
+          onMap: () => mapTapped = true,
+          onOrders: () => ordersTapped = true,
         ),
       ),
     );
     await tester.pump();
 
-    // Verify top header matching screenshot
+    // Verify top header matching Image 3
     expect(find.text(AppStrings.goodMorningGreeting), findsOneWidget);
-    expect(find.text(AppStrings.readyToTransportSubtitle), findsOneWidget);
+    expect(find.text('مؤسسة النور للتجارة العامة'), findsOneWidget);
     expect(find.byIcon(Icons.notifications_none_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.chat_bubble_outline_rounded), findsOneWidget);
 
-    // Verify hero banner
-    expect(find.text(AppStrings.newCargoBadge), findsOneWidget);
-    expect(find.text(AppStrings.doYouHaveNewCargoTitle), findsOneWidget);
-    expect(find.text(AppStrings.createOrderHeroDesc), findsOneWidget);
+    // Verify hero banner carousel title
+    expect(find.textContaining('انقل حمولتك'), findsOneWidget);
 
-    // Verify quick services section & primary CTA
-    expect(find.text(AppStrings.quickServicesSection), findsOneWidget);
-    expect(find.text(AppStrings.createTransportOrderBtn), findsOneWidget);
-    await tester.tap(find.text(AppStrings.createTransportOrderBtn));
+    // Verify "الخدمات الرئيسية" section and pastel action cards
+    expect(find.text('الخدمات الرئيسية'), findsOneWidget);
+    expect(find.text('إنشاء طلب نقل'), findsOneWidget);
+    expect(find.text('عرض السائقين'), findsOneWidget);
+    expect(find.text('حمولاتي'), findsOneWidget);
+    expect(find.text('طلباتي'), findsWidgets);
+
+    // Tap "إنشاء طلب نقل"
+    await tester.tap(find.text('إنشاء طلب نقل'));
     expect(createOrderTapped, isTrue);
 
-    // Verify 4 square action cards (حمولاتي, عروضي, التتبع, السجل)
-    expect(find.text(AppStrings.myCargosQuick), findsOneWidget);
-    expect(find.text(AppStrings.myOffersQuick), findsOneWidget);
-    expect(find.text(AppStrings.trackingQuick), findsOneWidget);
-    expect(find.text(AppStrings.historyQuick), findsOneWidget);
+    // Tap "عرض السائقين"
+    await tester.tap(find.text('عرض السائقين'));
+    expect(mapTapped, isTrue);
 
-    await tester.tap(find.text(AppStrings.myCargosQuick));
+    // Tap "حمولاتي"
+    await tester.tap(find.text('حمولاتي'));
     expect(cargosTapped, isTrue);
+
+    // Tap "طلباتي"
+    await tester.tap(find.text('طلباتي').first);
+    expect(ordersTapped, isTrue);
 
     // Verify activity summary section
     expect(find.text(AppStrings.activitySummarySection), findsOneWidget);
     expect(find.text(AppStrings.activeOrders), findsOneWidget);
     expect(find.text(AppStrings.newOffers), findsWidgets);
-    expect(find.text(AppStrings.pendingAction), findsOneWidget);
+    expect(find.text('حمولات مسجلة'), findsOneWidget);
   });
 
   testWidgets(
@@ -93,7 +105,7 @@ void main() {
     expect(find.text(AppStrings.accountNotVerifiedBannerSubtitle), findsOneWidget);
 
     // Tap CTA when unverified -> must NOT trigger createOrder, must show modal
-    await tester.tap(find.text(AppStrings.createTransportOrderBtn));
+    await tester.tap(find.text('إنشاء طلب نقل'));
     await tester.pumpAndSettle();
 
     expect(createOrderTapped, isFalse);
@@ -116,6 +128,8 @@ void main() {
       wrapWidget(
         Scaffold(
           drawer: MerchantDrawer(
+            merchantName: MerchantProfile.instance.contactName,
+            companyName: MerchantProfile.instance.companyName,
             onServicePoints: () => servicePointsTapped = true,
             onSupport: () => supportTapped = true,
             onLogout: () => logoutTapped = true,
@@ -131,7 +145,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('محمد أحمد'), findsOneWidget);
-    expect(find.text('مؤسسة الأمل التجارية'), findsOneWidget);
+    expect(find.text('مؤسسة النور للتجارة العامة'), findsOneWidget);
     expect(find.text('حساب تاجر معتمد'), findsOneWidget);
     expect(find.text('نقاط الخدمة'), findsOneWidget);
     expect(find.text('خدمة العملاء'), findsOneWidget);
@@ -177,8 +191,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('الرئيسية'), findsOneWidget);
-    expect(find.text('طلباتي'), findsOneWidget);
     expect(find.text('الخريطة'), findsOneWidget);
+    expect(find.text('طلباتي'), findsOneWidget);
     expect(find.text('حسابي'), findsOneWidget);
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
 
@@ -186,52 +200,63 @@ void main() {
     await tester.tap(find.text('طلباتي'));
     expect(selectedTab, equals(MerchantNavTab.orders));
 
+    // Tap Map tab
+    await tester.tap(find.text('الخريطة'));
+    expect(selectedTab, equals(MerchantNavTab.map));
+
     // Tap FAB
     await tester.tap(find.byIcon(Icons.add_rounded));
     expect(fabTapped, isTrue);
   });
 
   testWidgets(
-      'MerchantHomeScreen FAB (+) opens Quick Services bottom sheet modal with 4 square options',
+      'MerchantHomeScreen FAB (+) toggles in-screen dark quick actions card and converts to (X)',
       (tester) async {
     bool createOrderCalled = false;
+    bool cargosCalled = false;
 
     await tester.pumpWidget(
       wrapWidget(
         MerchantHomeScreen(
           isVerified: true,
           onCreateOrder: () => createOrderCalled = true,
+          onCargos: () => cargosCalled = true,
         ),
       ),
     );
     await tester.pump();
 
-    // Verify initial slide
-    expect(find.text('هل لديك شحنة جديدة؟'), findsOneWidget);
-
     // Tap center FAB (+) button in bottom navigation bar
-    final fabFinder = find.descendant(
-      of: find.byType(MerchantBottomNavBar),
-      matching: find.byIcon(Icons.add_rounded),
-    );
-    expect(fabFinder, findsOneWidget);
-    await tester.tap(fabFinder);
+    final addIconFinder = find.byIcon(Icons.add_rounded);
+    expect(addIconFinder, findsOneWidget);
+    await tester.tap(addIconFinder);
     await tester.pumpAndSettle();
 
-    // Verify Quick Services modal header
-    expect(find.text('خدمات سريعة'), findsOneWidget);
+    // Verify FAB icon changed from (+) to (X)
     expect(find.byIcon(Icons.close_rounded), findsOneWidget);
 
-    // Verify 4 square options without explanatory subtexts
+    // Verify 4 approved actions only inside the dark card
     expect(find.text('طلب نقل'), findsOneWidget);
-    expect(find.text('تتبع الرحلة'), findsOneWidget);
+    expect(find.text('تتبع الحمولة'), findsOneWidget);
     expect(find.text('إضافة حمولة'), findsOneWidget);
-    expect(find.text('خريطة السائقين'), findsOneWidget);
+    expect(find.text('إضافة رصيد'), findsOneWidget);
 
-    // Tap "طلب نقل" inside the modal
+    // Tap "طلب نقل" -> must execute callback and close card
     await tester.tap(find.text('طلب نقل'));
     await tester.pumpAndSettle();
 
     expect(createOrderCalled, isTrue);
+    // Card closed, icon reverted back to (+)
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
+
+    // Open again and test tapping "إضافة حمولة"
+    await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+
+    await tester.tap(find.text('إضافة حمولة'));
+    await tester.pumpAndSettle();
+    expect(cargosCalled, isTrue);
+    expect(find.byIcon(Icons.add_rounded), findsOneWidget);
   });
 }

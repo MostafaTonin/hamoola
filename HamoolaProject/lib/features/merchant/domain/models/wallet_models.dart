@@ -7,6 +7,7 @@ enum TransactionType {
   deposit,
   payment,
   refund,
+  withdrawal,
 }
 
 enum TransactionStatus {
@@ -80,7 +81,7 @@ class PaymentWallet {
       id: 'kuraimi',
       name: 'كريمي جوال',
       point: '553901',
-      brandColor: Color(0xFF1E3A8A),
+      brandColor: Color(0xFF7C3AED),
       icon: Icons.credit_card_rounded,
     ),
     PaymentWallet(
@@ -117,11 +118,15 @@ class PaymentWallet {
 class MerchantWalletData {
   final double balance;
   final double pendingBalance;
+  final double totalWithdrawn;
+  final double totalPaid;
   final List<MerchantTransaction> transactions;
 
   const MerchantWalletData({
     required this.balance,
     required this.pendingBalance,
+    this.totalWithdrawn = 0.0,
+    this.totalPaid = 0.0,
     required this.transactions,
   });
 
@@ -187,3 +192,112 @@ class MerchantWalletData {
     ],
   );
 }
+
+/// Status of provider financial settlement (Section 6)
+enum ProviderSettlementStatus {
+  pendingCompletion,
+  settled,
+  refunded,
+}
+
+/// Provider Financial Settlement Record (Section 6)
+/// Distinguishes requester paid amount, platform fee, and provider due amount.
+/// Held in `pendingCompletion` until Stage 9 trip closure.
+class ProviderSettlementRecord {
+  final String orderId;
+  final String providerName;
+  final double requesterPaidAmount;
+  final double providerDueAmount;
+  final double platformFee;
+  final ProviderSettlementStatus status;
+  final DateTime createdAt;
+  final DateTime? settledAt;
+
+  const ProviderSettlementRecord({
+    required this.orderId,
+    required this.providerName,
+    required this.requesterPaidAmount,
+    required this.providerDueAmount,
+    required this.platformFee,
+    required this.status,
+    required this.createdAt,
+    this.settledAt,
+  });
+
+  String get statusLabel {
+    switch (status) {
+      case ProviderSettlementStatus.pendingCompletion:
+        return 'معلقة لحين إغلاق الرحلة';
+      case ProviderSettlementStatus.settled:
+        return 'مكتملة ومتاحة للسحب';
+      case ProviderSettlementStatus.refunded:
+        return 'مستردة للعميل';
+    }
+  }
+
+  double get providerNetEarnings => providerDueAmount;
+
+  ProviderSettlementRecord copyWith({
+    String? orderId,
+    String? providerName,
+    double? requesterPaidAmount,
+    double? providerDueAmount,
+    double? platformFee,
+    ProviderSettlementStatus? status,
+    DateTime? createdAt,
+    DateTime? settledAt,
+  }) {
+    return ProviderSettlementRecord(
+      orderId: orderId ?? this.orderId,
+      providerName: providerName ?? this.providerName,
+      requesterPaidAmount: requesterPaidAmount ?? this.requesterPaidAmount,
+      providerDueAmount: providerDueAmount ?? this.providerDueAmount,
+      platformFee: platformFee ?? this.platformFee,
+      status: status ?? this.status,
+      createdAt: createdAt ?? this.createdAt,
+      settledAt: settledAt ?? this.settledAt,
+    );
+  }
+}
+
+/// Trip Rating Record (Section 12)
+/// Allows rating only after Stage 9 trip closure; prevents duplicate ratings.
+class TripRatingRecord {
+  final String orderId;
+  final double rating;
+  final String comment;
+  final DateTime createdAt;
+
+  const TripRatingRecord({
+    required this.orderId,
+    required this.rating,
+    this.comment = '',
+    required this.createdAt,
+  });
+}
+
+/// Represents the in-memory wallet state isolated for a specific user role
+class RoleWalletState {
+  double balance;
+  double pendingBalance;
+  double totalWithdrawn;
+  double totalPaid;
+  List<MerchantTransaction> transactions;
+
+  RoleWalletState({
+    required this.balance,
+    required this.pendingBalance,
+    this.totalWithdrawn = 0.0,
+    this.totalPaid = 0.0,
+    required this.transactions,
+  });
+
+  MerchantWalletData toWalletData() => MerchantWalletData(
+        balance: balance,
+        pendingBalance: pendingBalance,
+        totalWithdrawn: totalWithdrawn,
+        totalPaid: totalPaid,
+        transactions: List.unmodifiable(transactions),
+      );
+}
+

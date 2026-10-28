@@ -49,10 +49,11 @@ abstract final class AppStrings {
 
   // Register Screen & Roles
   static const String register = 'إنشاء حساب جديد';
-  static const String registerWelcome = 'انضم إلى مجتمع حمولة للنقل الثقيل';
+  static const String registerWelcome = 'انضم إلى مجتمع حمولة للنقل';
   static const String selectRole = 'اختر نوع الحساب';
-  static const String roleMerchant = 'تاجر';
+  static const String roleClient = 'عميل';
   static const String roleDriver = 'سائق';
+  static const String roleMerchant = 'تاجر';
   static const String roleOffice = 'مكتب نقل';
   static const String fullName = 'الاسم الكامل';
   static const String fullNameHint = 'أدخل الاسم كاملاً';
@@ -86,7 +87,7 @@ abstract final class AppStrings {
   static const String merchantDashboard = 'لوحة تحكم التاجر';
   static const String merchantGreetingPrefix = 'مرحبًا، ';
   static const String merchantDefaultName = 'محمد أحمد';
-  static const String merchantDefaultCompany = 'مؤسسة الأمل التجارية';
+  static const String merchantDefaultCompany = 'مؤسسة النور للتجارة العامة';
   static const String merchantWhatToMove = 'ماذا تريد أن تنقل اليوم؟';
   static const String merchantCreateOrderCta = 'إنشاء طلب نقل';
   static const String activeOrders = 'الطلبات النشطة';
@@ -117,8 +118,8 @@ abstract final class AppStrings {
   // Cargo Module Tokens
   static const String myCargos = 'حمولاتي';
   static const String addCargo = 'إضافة حمولة';
-  static const String weightLabel = 'الوزن';
-  static const String quantityLabel = 'الكمية / الوحدات';
+  static const String weightLabel = 'الوزن الإجمالي';
+  static const String quantityLabel = 'الكمية';
   static const String buildingMaterials = 'مواد بناء';
   static const String foodSupplies = 'مواد غذائية';
   static const String coveringRequired = 'تغطية أثناء النقل';
@@ -128,16 +129,16 @@ abstract final class AppStrings {
   static const String noCargosDesc = 'أضف حمولة لحفظ بياناتها واستخدامها عند إنشاء طلب نقل.';
 
   // Create Cargo Form Tokens
-  static const String createCargoTitle = 'إنشاء حمولة';
-  static const String cargoInfoSection = 'معلومات الحمولة';
+  static const String createCargoTitle = 'إضافة حمولة';
+  static const String cargoInfoSection = 'بيانات الحمولة';
   static const String cargoNameLabel = 'اسم الحمولة';
-  static const String cargoNameHint = 'مثال: أجهزة كهربائية';
+  static const String cargoNameHint = 'مثال: حديد إنشائي';
   static const String cargoNameRequiredError = 'يرجى إدخال اسم الحمولة';
-  static const String cargoDescLabel = 'وصف الحمولة';
-  static const String cargoDescHint = '200 كرتون أجهزة كهربائية منزلية';
-  static const String categoryLabel = 'التصنيف';
-  static const String categoryHint = 'اختر تصنيف البضاعة';
-  static const String categoryRequiredError = 'يرجى اختيار تصنيف البضاعة';
+  static const String cargoDescLabel = 'ملاحظات إضافية';
+  static const String cargoDescHint = 'أي تفاصيل إضافية تساعد مقدم الخدمة ...';
+  static const String categoryLabel = 'نوع الحمولة';
+  static const String categoryHint = 'اختر نوع البضاعة';
+  static const String categoryRequiredError = 'يرجى اختيار نوع الحمولة';
   static const String weightRequiredError = 'يرجى إدخال وزن صحيح';
   static const String qtyRequiredError = 'يرجى إدخال كمية صحيحة واختيار الوحدة';
   static const String unitHint = 'الوحدة';
@@ -149,7 +150,7 @@ abstract final class AppStrings {
   static const String volumeHint = '0.0';
   static const String volumeUnit = 'م³';
   static const String volumeInvalidError = 'يرجى إدخال قيمة حجم صحيحة أو ترك الحقل فارغاً';
-  static const String handlingRequirementsTitle = 'متطلبات المناولة';
+  static const String handlingRequirementsTitle = 'تعليمات المناولة';
   static const String handlingRequirementsSubtitle = 'اختر ما ينطبق على الحمولة';
   static const String handlingCooling = 'تحتاج تبريد';
   static const String handlingFragile = 'قابلة للكسر';
@@ -174,29 +175,30 @@ abstract final class AppStrings {
   static const String optionalTag = '(اختياري)';
 
   // Transport Order Creation Tokens
-  static const String createOrderTitle = 'طلب نقل جديد';
-  static const String createOrderSubtitle = 'أدخل بيانات الطلب للعثور على سائق مناسب';
+  static const String createOrderTitle = 'إضافة طلب';
+  static const String createOrderSubtitle = 'أدخل بيانات الطلب واحفظه أو انشره لاحقاً';
   static const String orderValidationMissing = 'يرجى استكمال الحقول المطلوبة للمتابعة';
-  static const String orderLocationsTitle = 'مواقع النقل';
+  static const String orderLocationsTitle = '1. مواقع النقل';
   static const String originLocationLabel = 'موقع التحميل';
-  static const String destLocationLabel = 'موقع التفريغ';
+  static const String destLocationLabel = 'موقع التسليم';
   static const String routeDistanceEstimate = 'المسافة 310 كم';
   static const String routeDurationEstimate = 'حوالي 5 س 20 د';
-  static const String requestedCargoTitle = 'الحمولة المطلوبة';
-  static const String selectCargoFromMine = 'اختر حمولة من حمولاتي';
-  static const String addNewCargoBtn = 'إضافة حمولة جديدة';
-  static const String transportRequirementsTitle = 'متطلبات النقل';
+  static const String requestedCargoTitle = '2. الحمولة المطلوب نقلها';
+  static const String selectCargoFromMine = 'اختر الحمولة';
+  static const String addNewCargoBtn = 'إضافة حمولة';
+  static const String transportRequirementsTitle = '3. متطلبات النقل';
   static const String vehicleTypeLabel = 'نوع المركبة المطلوبة';
   static const String loadingDateLabel = 'تاريخ التحميل';
   static const String loadingTimeLabel = 'الوقت المفضل';
   static const String scheduleFlexibilityLabel = 'مرونة الموعد';
-  static const String flexExact = 'دقيق';
-  static const String flexPlusMinus6 = '±6 ساعات';
-  static const String flexPlusMinus12 = '±12 ساعة';
-  static const String expectedBudgetTitle = 'الميزانية المتوقعة للنقل';
-  static const String budgetMaxLabel = 'الحد الأعلى';
-  static const String budgetMinLabel = 'الحد الأدنى';
-  static const String yemeniRialUnit = 'ر.ي';
+  static const String flexExact = 'دقيق في الوقت';
+  static const String flexPlusMinus6 = '± 6 ساعات';
+  static const String flexPlusMinus12 = '± 12 ساعة';
+  static const String expectedBudgetTitle = '4. الميزانية المتوقعة (اختياري)';
+  static const String budgetMaxLabel = 'الحد الأعلى المتوقع';
+  static const String budgetMinLabel = 'الحد الأدنى المتوقع';
+  static const String yemeniRialUnit = 'ريال يمني';
+  static const String saudiRialUnit = 'ريال سعودي';
   static const String budgetNegotiable = 'الميزانية قابلة للتفاوض';
   static const String budgetNegotiableHint = 'يمكن للسائق تقديم عرض مختلف';
   static const String publishOrderToTitle = 'نشر الطلب إلى';
@@ -207,14 +209,30 @@ abstract final class AppStrings {
   static const String chooseDriverFromMap = '+ اختيار السائق من الخريطة';
   static const String chooseOfficeBtn = '+ اختيار مكتب النقل';
   static const String changeBtn = 'تغيير';
-  static const String additionalInfoTitle = 'معلومات إضافية';
-  static const String orderNotesHint = 'ملاحظات على الطلب (اختياري)\nمثال: يجب الالتزام بموعد التحميل ...';
+  static const String additionalInfoTitle = '5. ملاحظات إضافية (اختياري)';
+  static const String orderNotesHint = 'مثال: يرجى التأكد من سلامة التغليف، واستخدام رافعة عند التحميل...';
   static const String contactInfoTitle = 'معلومات التواصل';
   static const String preferredContactLabel = 'طريقة التواصل المفضلة';
   static const String contactWhatsapp = 'واتساب';
   static const String contactCall = 'اتصال';
   static const String contactPhoneLabel = 'رقم الجوال';
-  static const String submitTransportOrderBtn = 'نشر طلب النقل';
+  static const String submitTransportOrderBtn = 'نشر الطلب';
+  static const String saveOrderDraftBtn = 'حفظ الطلب';
+  static const String saveOrderDraftSub = 'سيتم حفظ الطلب في طلباتي';
+  static const String publishOrderActionBtn = 'نشر الطلب';
+  static const String publishOrderActionSub = 'اختر الجهة التي تريد نشر الطلب لها';
+
+  // Publish Target & Driver Selection Tokens
+  static const String publishTargetTitle = 'نشر طلب النقل';
+  static const String publishTargetSubtitle = 'اختر الجهة التي تريد نشر الطلب لها';
+  static const String selectDriverTitle = 'اختيار سائق محدد';
+  static const String selectDriverSubtitle = 'اختر السائق الذي تريد إرسال الطلب له';
+  static const String searchDriverHint = 'البحث عن سائق بالاسم...';
+  static const String nearbyDriversLabel = 'السائقون القريبون';
+  static const String driverAvailableNow = 'متاح الآن';
+  static const String driverBusyNow = 'مشغول حالياً';
+  static const String chooseDriverBtn = 'اختيار';
+  static const String driverDetailsBtn = 'عرض الملف';
 
   // Review & Success Sheets
   static const String reviewOrderTitle = 'مراجعة طلب النقل';
@@ -254,8 +272,9 @@ abstract final class AppStrings {
 
   // Merchant Map Tokens
   static const String merchantMapTitle = 'خريطة السائقين';
+  static const String merchantMapSubtitle = 'السائقون المتاحون في السعودية واليمن';
   static const String availableDriversCount = '24 سائقاً متاحاً الآن';
-  static const String searchDriversHint = 'ابحث عن سائق أو مدينة أو منطقة...';
+  static const String searchDriversHint = 'ابحث عن مدينة أو منطقة أو سائق...';
   static const String categoryTrucks = 'شاحنات';
   static const String categoryTrailers = 'قاطرات';
   static const String categoryDyna = 'دينات';
@@ -304,19 +323,31 @@ abstract final class AppStrings {
   static const String logoutMenuTitle = 'تسجيل الخروج';
   static const String logoutMenuSub = 'العودة لشاشة تسجيل الدخول';
 
-  // Merchant Wallet Tokens
+  // Merchant & Driver Wallet Tokens
   static const String merchantWalletTitle = 'محفظتي';
-  static const String merchantWalletSub = 'المحفظة الرقمية لرصيد حمولة';
+  static const String merchantWalletSub = 'محفظتك الرقمية في حمولة';
   static const String addBalanceBtn = 'إضافة رصيد';
-  static const String currentBalanceLabel = 'الرصيد الحالي';
+  static const String currentBalanceLabel = 'الرصيد المتاح';
+  static const String availableBalanceForWithdrawal = 'الرصيد المتاح للسحب';
   static const String currencyYer = 'ريال يمني';
   static const String currencyYerShort = 'ر.ي';
   static const String currencyTagYer = 'YER';
-  static const String pendingReviewLabel = 'قيد المراجعة:';
+  static const String pendingReviewLabel = 'المبالغ المعلّقة';
+  static const String pendingDuesLabel = 'المستحقات المعلّقة';
+  static const String totalWithdrawnLabel = 'إجمالي المسحوبات';
+  static const String totalPaymentsLabel = 'إجمالي المدفوعات';
+  static const String withdrawBalanceBtn = 'سحب الرصيد';
+  static const String withdrawBalanceSub = 'طلب تحويل مستحقاتك إلى حسابك البنكي المعتمد';
+  static const String addBalanceSub = 'شحن محفظتك الرقمية عبر وسائل الدفع المعتمدة';
   static const String financialTransactionsSection = 'الحركات المالية';
   static const String txFilterAll = 'الكل';
   static const String txFilterDeposits = 'الإيداعات';
   static const String txFilterPayments = 'المدفوعات';
+  static const String txFilterDues = 'المستحقات';
+  static const String txFilterWithdrawals = 'السحوبات';
+  static const String txFilterRefunds = 'المبالغ المستردة';
+  static const String statusAvailableForWithdrawal = 'متاحة للسحب';
+  static const String statusUnderProcessing = 'قيد المعالجة';
   static const String noTransactionsFound = 'لا توجد حركات مالية مسجلة في هذا القسم';
 
   // Add Balance & Payment Method Tokens
@@ -345,9 +376,40 @@ abstract final class AppStrings {
   static const String depositSuccessDateLabel = 'التاريخ:';
   static const String depositSuccessCloseBtn = 'العودة للمحفظة';
 
+  // Withdrawal Screen Tokens
+  static const String withdrawBalanceTitle = 'سحب الرصيد';
+  static const String withdrawBalanceHeaderSub = 'تحويل رصيدك عبر وسائل التحويل المعتمدة';
+  static const String withdrawMethodTitle = 'طريقة السحب';
+  static const String withdrawMethodSubscriberTitle = 'تحويل لمشترك';
+  static const String withdrawMethodSubscriberDesc = 'تحويل إلى مشترك عبر رقم الهاتف';
+  static const String withdrawMethodPosTitle = 'دفع مشتريات';
+  static const String withdrawMethodPosDesc = 'دفع إلى رقم نقطة البيع';
+  static const String recipientDetailsTitle = 'بيانات المستلم';
+  static const String recipientPhoneLabel = 'رقم الهاتف';
+  static const String recipientPhoneHint = 'أدخل رقم الهاتف';
+  static const String recipientFullNameLabel = 'الاسم الرباعي';
+  static const String recipientFullNameHint = 'أدخل الاسم الرباعي للمستلم';
+  static const String posPointNumberLabel = 'نقطة البيع';
+  static const String posPointNumberHint = 'أدخل رقم نقطة البيع';
+  static const String posCommercialNameLabel = 'اسم نقطة البيع / الاسم التجاري بالكامل';
+  static const String posCommercialNameHint = 'أدخل اسم نقطة البيع أو الاسم التجاري بالكامل';
+  static const String subscriberWarningNotice = 'تأكد من صحة البيانات قبل إرسال الطلب، سيتم تحويل المبلغ إلى رقم الهاتف المدخل.';
+  static const String posWarningNotice = 'تأكد من صحة البيانات قبل إرسال الطلب، سيتم تحويل المبلغ إلى رقم نقطة البيع المدخل.';
+  static const String sendWithdrawalRequestBtn = 'إرسال طلب السحب';
+  static const String maxAmountLabel = 'الحد الأقصى';
+  static const String withdrawalSuccessTitle = 'تم إرسال طلب السحب بنجاح';
+  static const String withdrawalSuccessSub = 'طلبك قيد المراجعة والتدقيق المالي قبل تنفيذ عملية التحويل';
+
   // Home Screenshot UI Tokens
-  static const String goodMorningGreeting = 'صباح الخير، مؤسسة الأمل 👋';
+  static const String goodMorningGreeting = 'صباح الخير';
   static const String readyToTransportSubtitle = 'جاهز لنقل حمولتك اليوم؟';
+  static const String accountDataSection = 'بيانات الحساب';
+  static const String hamulaOperationsSection = 'عمليات حمولة';
+  static const String settingsAndHelpSection = 'الإعدادات والمساعدة';
+  static const String editAccountDataTitle = 'تعديل بيانات الحساب';
+  static const String registeredCargosLabel = 'حمولة مسجلة';
+  static const String activeOrdersLabel = 'طلبات نشطة';
+  static const String completedTripsLabel = 'رحلة مكتملة';
   static const String newCargoBadge = 'شحنة جديدة';
   static const String doYouHaveNewCargoTitle = 'هل لديك شحنة جديدة؟';
   static const String createOrderHeroDesc = 'أنشئ طلب نقل وحدد وجهتك وموقعك';

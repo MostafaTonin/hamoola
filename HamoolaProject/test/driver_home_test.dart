@@ -93,6 +93,8 @@ void main() {
       // Tap 'تحميل فوري'
       final urgentFilter = find.widgetWithText(ChoiceChip, 'تحميل فوري');
       expect(urgentFilter, findsOneWidget);
+      await tester.ensureVisible(urgentFilter);
+      await tester.pumpAndSettle();
       await tester.tap(urgentFilter);
       await tester.pumpAndSettle();
 
@@ -102,6 +104,8 @@ void main() {
       // Tap 'مطابق لشاحنتي'
       final matchFilter = find.widgetWithText(ChoiceChip, 'مطابق لشاحنتي');
       expect(matchFilter, findsOneWidget);
+      await tester.ensureVisible(matchFilter);
+      await tester.pumpAndSettle();
       await tester.tap(matchFilter);
       await tester.pumpAndSettle();
 

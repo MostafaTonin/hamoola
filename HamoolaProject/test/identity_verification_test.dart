@@ -91,16 +91,16 @@ void main() {
       expect(find.text('بيانات الهوية'), findsOneWidget);
       expect(find.text('الصورة الشخصية'), findsOneWidget);
       expect(find.text('توثيق الهوية • حساب مواطن'), findsOneWidget);
-      expect(find.text('توثيق الهوية'), findsOneWidget);
+      expect(find.text('توثيق الهوية الشخصية'), findsOneWidget);
       expect(find.text('اختياري'), findsOneWidget);
 
-      // Check prepopulated values matching user screenshot
-      expect(find.text('11010290469'), findsOneWidget);
-      expect(find.text('حجة'), findsOneWidget);
-      expect(find.text('2026-4-5'), findsOneWidget);
-      expect(find.text('2036-4-4'), findsOneWidget);
-      expect(find.text('حجة - مبين - الجبر'), findsOneWidget);
-      expect(find.text('1995-08-12'), findsOneWidget);
+      // Check prepopulated values matching Prompt 02 demo data
+      expect(find.text('TEST-YE-100245'), findsOneWidget);
+      expect(find.text('الأحوال المدنية — بيانات تجريبية'), findsOneWidget);
+      expect(find.text('2022-03-15'), findsOneWidget);
+      expect(find.text('2032-03-14'), findsOneWidget);
+      expect(find.text('صنعاء'), findsOneWidget);
+      expect(find.text('1998-05-12'), findsOneWidget);
 
       // Check document upload labels
       expect(find.text('رفع صور وثيقة الهوية'), findsOneWidget);
@@ -109,7 +109,7 @@ void main() {
       expect(find.text('صورة سيلفي مع الهوية'), findsWidgets);
 
       // Check Action Buttons
-      expect(find.text('توثيق الحساب'), findsOneWidget);
+      expect(find.text('إرسال طلب التوثيق'), findsOneWidget);
       expect(find.text('تخطي الآن'), findsOneWidget);
 
       // Open Smart Scanner Modal
@@ -128,8 +128,8 @@ void main() {
       await tester.tap(find.text('مسح البطاقة الذكية الآن'));
       await tester.pump(const Duration(milliseconds: 400));
 
-      // Tap 'توثيق الحساب' and confirm completion dialog
-      final verifyButton = find.widgetWithText(ElevatedButton, 'توثيق الحساب');
+      // Tap 'إرسال طلب التوثيق' and confirm completion dialog
+      final verifyButton = find.widgetWithText(ElevatedButton, 'إرسال طلب التوثيق');
       await tester.ensureVisible(verifyButton);
       await tester.tap(verifyButton);
       await tester.pump(); // Start simulated loading
@@ -137,7 +137,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Verify success dialog appears
-      expect(find.text('تم توثيق الحساب بنجاح ✓'), findsOneWidget);
+      expect(find.text('تم إرسال طلب التوثيق بنجاح ✓'), findsOneWidget);
       expect(find.text('متابعة إلى الرئيسية'), findsOneWidget);
 
       // Tap confirm in modal

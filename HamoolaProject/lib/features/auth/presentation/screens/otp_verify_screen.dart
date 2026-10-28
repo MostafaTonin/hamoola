@@ -7,22 +7,31 @@ import '../../../../core/constants/app_strings.dart';
 import '../../../../core/responsive/breakpoints.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_dimensions.dart';
+import '../../domain/models/auth_simulation_store.dart';
 
 /// Screen for phone number OTP verification.
 /// Features:
 /// - 6 separate digit input fields with auto-focus progression & backspace handling.
 /// - 60s countdown timer with resend activation.
-/// - Phone number pill display with edit option.
-/// - Direct callback upon verification.
+/// - Phone number pill display with privacy masking and edit option.
+/// - Selected role badge and test OTP helper pill for prototype simulation.
+/// - Validates OTP strictly against AuthSimulationStore.defaultDemoOtp.
+/// - Direct callback upon verification without prematurely granting KYC approval.
 class OtpVerifyScreen extends StatefulWidget {
   final String phoneNumber;
+  final String? userRole;
+  final String? userName;
+  final String? userId;
   final VoidCallback? onVerified;
   final VoidCallback? onBack;
   final VoidCallback? onEditPhone;
 
   const OtpVerifyScreen({
     super.key,
-    this.phoneNumber = '+967 770 123 456',
+    this.phoneNumber = '+967 777 123 456',
+    this.userRole,
+    this.userName,
+    this.userId,
     this.onVerified,
     this.onBack,
     this.onEditPhone,
@@ -80,6 +89,27 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
 
   bool get _isComplete => _currentOtp.length == _otpLength;
 
+  /// Masks phone number for privacy preservation (e.g. +967 77 *** 456)
+  String _getMaskedPhoneNumber(String raw) {
+    var p = raw.replaceAll(RegExp(r'[\s\-\+\(\)]'), '');
+    String countryPrefix = '+967';
+    if (p.startsWith('967')) {
+      countryPrefix = '+967';
+      p = p.substring(3);
+    } else if (p.startsWith('966')) {
+      countryPrefix = '+966';
+      p = p.substring(3);
+    }
+    if (p.startsWith('0')) p = p.substring(1);
+
+    if (p.length >= 7) {
+      final start = p.substring(0, 2);
+      final end = p.substring(p.length - 3);
+      return '$countryPrefix $start *** $end';
+    }
+    return raw;
+  }
+
   void _handleResend() {
     if (_countdown > 0) return;
     for (final c in _controllers) {
@@ -91,19 +121,28 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          AppStrings.otpResentSuccess,
-          style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+        content: Row(
+          children: [
+            const Icon(Icons.refresh_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'تم تجديد رمز التحقق التجريبي (123456) بنجاح ✓',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
         ),
-        backgroundColor: AppColors.success,
-        duration: const Duration(seconds: 2),
+        backgroundColor: AppColors.navyDark,
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
   Future<void> _verifyOtp() async {
+    if (_isLoading) return;
     if (!_isComplete) {
-      setState(() => _errorMessage = 'يرجى إدخال كامل الرمز (6 أرقام)');
+      setState(() => _errorMessage = 'يرجى إدخال كامل رمز التحقق (6 أرقام).');
       return;
     }
 
@@ -113,11 +152,23 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
     });
 
     // Simulate verification delay
-    await Future.delayed(const Duration(milliseconds: 600));
+    await Future.delayed(const Duration(milliseconds: 300));
 
     if (!mounted) return;
 
+    final result = AuthSimulationStore.instance.verifyOtpResult(
+      widget.phoneNumber,
+      _currentOtp,
+    );
+
     setState(() => _isLoading = false);
+
+    if (!result.isSuccess) {
+      setState(() {
+        _errorMessage = result.errorMessage ?? 'رمز التحقق غير صحيح، حاول مرة أخرى.';
+      });
+      return;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -125,9 +176,11 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
           children: [
             const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
             const SizedBox(width: 8),
-            Text(
-              'تم التحقق من الحساب بنجاح ✓',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+            Expanded(
+              child: Text(
+                'تم التحقق من رقم الهاتف بنجاح ✓',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+              ),
             ),
           ],
         ),
@@ -142,7 +195,7 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
   void _onDigitChanged(int index, String value) {
     setState(() => _errorMessage = null);
 
-    // Handle pasting multi-digit code
+    // Handle pasting multi-digit code (e.g. "123456")
     if (value.length > 1) {
       final digits = value.replaceAll(RegExp(r'\D'), '');
       for (int i = 0; i < _otpLength && i < digits.length; i++) {
@@ -258,7 +311,7 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                     ),
                     const SizedBox(height: 12),
 
-                    // Phone Pill Display with Edit Action
+                    // Phone Pill Display with Privacy Masking & Edit Action
                     Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -275,24 +328,30 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                               : const Color(0xFFDBEAFE),
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
                         children: [
-                          const Text('🇾🇪 ', style: TextStyle(fontSize: 16)),
-                          Directionality(
-                            textDirection: TextDirection.ltr,
-                            child: Text(
-                              widget.phoneNumber,
-                              style: GoogleFonts.cairo(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w800,
-                                color: isDark
-                                    ? AppColors.textWhite
-                                    : const Color(0xFF0F172A),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('🇾🇪 ', style: TextStyle(fontSize: 16)),
+                              Directionality(
+                                textDirection: TextDirection.ltr,
+                                child: Text(
+                                  _getMaskedPhoneNumber(widget.phoneNumber),
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: isDark
+                                        ? AppColors.textWhite
+                                        : const Color(0xFF0F172A),
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
-                          const SizedBox(width: 10),
                           InkWell(
                             onTap: widget.onEditPhone ?? widget.onBack,
                             borderRadius: BorderRadius.circular(6),
@@ -314,7 +373,32 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 32),
+
+                    if (widget.userRole != null && widget.userRole!.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFFF59E0B).withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Text(
+                          'نوع الحساب: ${widget.userRole}',
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: const Color(0xFFB45309),
+                          ),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 28),
 
                     // 6 OTP Digit Input Boxes
                     Directionality(
@@ -343,7 +427,6 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                                 focusNode: _focusNodes[index],
                                 keyboardType: TextInputType.number,
                                 textAlign: TextAlign.center,
-                                maxLength: 1,
                                 style: GoogleFonts.cairo(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w900,
@@ -353,6 +436,7 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                                 ),
                                 inputFormatters: [
                                   FilteringTextInputFormatter.digitsOnly,
+                                  LengthLimitingTextInputFormatter(6),
                                 ],
                                 decoration: InputDecoration(
                                   counterText: '',
@@ -364,16 +448,20 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
                                     borderSide: BorderSide(
-                                      color: isDark
-                                          ? Colors.white.withValues(alpha: 0.12)
-                                          : const Color(0xFFCBD5E1),
-                                      width: 1.2,
+                                      color: _errorMessage != null
+                                          ? const Color(0xFFEF4444)
+                                          : (isDark
+                                              ? Colors.white.withValues(alpha: 0.12)
+                                              : const Color(0xFFCBD5E1)),
+                                      width: _errorMessage != null ? 1.5 : 1.2,
                                     ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(12),
-                                    borderSide: const BorderSide(
-                                      color: AppColors.primaryGold,
+                                    borderSide: BorderSide(
+                                      color: _errorMessage != null
+                                          ? const Color(0xFFEF4444)
+                                          : AppColors.primaryGold,
                                       width: 2.0,
                                     ),
                                   ),
@@ -388,40 +476,69 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
 
                     if (_errorMessage != null) ...[
                       const SizedBox(height: 12),
-                      Text(
-                        _errorMessage!,
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.error,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF2F2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFFCA5A5)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.error_outline_rounded,
+                              color: Color(0xFFDC2626),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                _errorMessage!,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: const Color(0xFF991B1B),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
 
-                    const SizedBox(height: 28),
+                    const SizedBox(height: 20),
 
                     // Countdown & Resend Option
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    Wrap(
+                      alignment: WrapAlignment.center,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         if (_countdown > 0) ...[
-                          Icon(
-                            Icons.timer_outlined,
-                            size: 16,
-                            color: isDark
-                                ? AppColors.textSubtle
-                                : AppColors.textMutedLight,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${AppStrings.resendCodeIn} 00:${_countdown.toString().padLeft(2, '0')}',
-                            style: GoogleFonts.cairo(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: isDark
-                                  ? AppColors.textSubtle
-                                  : AppColors.textMutedLight,
-                            ),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.timer_outlined,
+                                size: 16,
+                                color: isDark
+                                    ? AppColors.textSubtle
+                                    : AppColors.textMutedLight,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                '${AppStrings.resendCodeIn} 00:${_countdown.toString().padLeft(2, '0')}',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? AppColors.textSubtle
+                                      : AppColors.textMutedLight,
+                                ),
+                              ),
+                            ],
                           ),
                         ] else ...[
                           Text(
@@ -433,7 +550,6 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                                   : AppColors.textMutedLight,
                             ),
                           ),
-                          const SizedBox(width: 6),
                           InkWell(
                             onTap: _handleResend,
                             child: Text(
@@ -450,7 +566,12 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
                       ],
                     ),
 
-                    const SizedBox(height: 36),
+                    const SizedBox(height: 16),
+
+                    // Prototype Demo OTP Helper Pill
+                    _buildDemoOtpPill(isDark),
+
+                    const SizedBox(height: 30),
 
                     // Primary Verification Action Button
                     SizedBox(
@@ -491,6 +612,52 @@ class _OtpVerifyScreenState extends State<OtpVerifyScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDemoOtpPill(bool isDark) {
+    return InkWell(
+      onTap: () {
+        const testCode = AuthSimulationStore.defaultDemoOtp;
+        for (int i = 0; i < _otpLength && i < testCode.length; i++) {
+          _controllers[i].text = testCode[i];
+        }
+        setState(() => _errorMessage = null);
+        _focusNodes.last.unfocus();
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.vpn_key_outlined,
+              size: 14,
+              color: AppColors.primaryGold,
+            ),
+            const SizedBox(width: 6),
+            Flexible(
+              child: Text(
+                'رمز الاختبار: 123456 (انقر للتعبئة)',
+                style: GoogleFonts.cairo(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? AppColors.textSubtle : const Color(0xFF64748B),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
         ),
       ),
     );
